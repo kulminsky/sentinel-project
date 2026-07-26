@@ -1,3 +1,7 @@
+import type { FetchLike } from "../core/check.js";
+
+export type { FetchLike } from "../core/check.js";
+
 export type AiProviderName = "openai" | "claude";
 
 export type AiProviderFailureCode =
@@ -37,11 +41,6 @@ export interface AiProvider {
   name: AiProviderName;
   analyze(request: AiStructuredRequest): Promise<AiProviderOutcome>;
 }
-
-export type FetchLike = (
-  input: string | URL | Request,
-  init?: RequestInit,
-) => Promise<Response>;
 
 type JsonRequestOutcome =
   | {

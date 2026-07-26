@@ -2,24 +2,29 @@ import { constants } from "node:fs";
 import { access, stat } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 
-import { runSyntheticAiCheck } from "./ai/check.js";
-import { disabledAiSetup, type AiCheckSetup } from "./ai/config.js";
-import { checkRepositoryReadme } from "./checks/repository-readme.js";
 import {
-  createCheckResult,
-  type CheckResult,
-  type ScanReport,
-} from "./core/result.js";
+  disabledAiSetup,
+  type AiCheckSetup,
+  type EnvironmentReferenceResolver,
+} from "./ai/config.js";
+import { CHECKS } from "./checks/registry.js";
+import type { SentinelConfig } from "./config/schema.js";
+import type { FetchLike, ScanContext } from "./core/check.js";
+import type { ScanReport } from "./core/result.js";
+import { runChecks } from "./core/runner.js";
+import { probeConfiguredServices } from "./runtime/reachability.js";
 
 export interface ScanOptions {
   ai?: AiCheckSetup;
+  resolveEnvironmentReference?: EnvironmentReferenceResolver;
+  fetch?: FetchLike;
 }
 
 export async function scanProject(
-  targetRoot: string,
+  config: SentinelConfig,
   options: ScanOptions = {},
 ): Promise<ScanReport> {
-  const resolvedRoot = resolve(targetRoot);
+  const resolvedRoot = resolve(config.target.root);
   const targetStat = await stat(resolvedRoot);
 
   if (!targetStat.isDirectory()) {
@@ -28,39 +33,25 @@ export async function scanProject(
 
   await access(resolvedRoot, constants.R_OK);
 
-  let incomplete = false;
-  const results: CheckResult[] = [];
-
-  try {
-    results.push(...(await checkRepositoryReadme(resolvedRoot)));
-  } catch {
-    incomplete = true;
-    results.push(
-      createCheckResult({
-        checkId: "repository.readme",
-        title: "Repository README",
-        level: "Code & Repository",
-        phase: "static",
-        status: "Skipped",
-        severity: "Info",
-        finding: "Sentinel could not execute the repository README check.",
-        recommendation:
-          "Review the Sentinel execution diagnostic and retry the scan.",
-        diagnosticCode: "CHECK_EXECUTION_ERROR",
-      }),
-    );
-  }
-
-  const aiExecution = await runSyntheticAiCheck(
-    options.ai ?? disabledAiSetup(),
+  const fetchImplementation = options.fetch ?? fetch;
+  const reachability = await probeConfiguredServices(
+    config,
+    fetchImplementation,
   );
-  results.push(aiExecution.result);
-  incomplete ||= aiExecution.incomplete;
+  const context: ScanContext = {
+    config,
+    ai: options.ai ?? disabledAiSetup(),
+    resolveEnvironmentReference:
+      options.resolveEnvironmentReference ?? (() => undefined),
+    fetch: fetchImplementation,
+    reachability,
+  };
+  const execution = await runChecks(CHECKS, context);
 
   return {
     targetName: basename(resolvedRoot) || resolvedRoot,
     generatedAt: new Date().toISOString(),
-    incomplete,
-    results,
+    incomplete: execution.incomplete,
+    results: execution.results,
   };
 }

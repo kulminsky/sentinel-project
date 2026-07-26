@@ -69,6 +69,10 @@ export function renderMarkdownReport(report: ScanReport): string {
         lines.push(`- **Subject:** ${inline(result.subject)}`);
       }
 
+      if (result.durationMs !== undefined) {
+        lines.push(`- **Duration:** ${result.durationMs} ms`);
+      }
+
       lines.push(
         `- **Finding:** ${inline(result.finding)}`,
         `- **Recommendation:** ${inline(result.recommendation)}`,

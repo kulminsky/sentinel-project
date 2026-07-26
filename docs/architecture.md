@@ -15,22 +15,20 @@ Sentinel provides:
 - One bounded LLM-based semantic test-gap check.
 - A Markdown report containing all required statuses, severities, findings, recommendations, and summary counts.
 
-The design favors plain functions, fixed check registration, explicit boundaries, and sequential execution. Sentinel is not a plugin platform or a hosted service.
+The design favors plain functions, fixed check registration, explicit boundaries, and bounded concurrency at the analysis-level boundary. Sentinel is not a plugin platform or a hosted service.
 
 ## Approved Architecture
 
 The scan is coordinated by one visible pipeline:
 
 1. Load and validate configuration.
-2. Inventory the project and detect its stack.
-3. Run always-on static checks.
-4. Probe configured API and UI services.
-5. Run API runtime checks or static API fallback.
-6. Run Playwright checks when the UI is reachable.
-7. Run or gracefully skip the AI check.
-8. Normalize results, build the summary, and write Markdown.
+2. Validate the target and build shared inventory when that milestone is available.
+3. Probe each configured API and UI service once and cache the observations.
+4. Run the four fixed analysis-level groups concurrently.
+5. Run checks sequentially in registration order within each level.
+6. Normalize results, build the summary, and write Markdown.
 
-Checks run sequentially for predictable behavior, logs, cleanup, and evidence. No scheduler or general concurrency framework is needed.
+Every check owns an explicit timeout and error boundary. Completion timing never controls report order, and no scheduler or general concurrency framework is used.
 
 ## Module Boundaries
 
@@ -38,7 +36,7 @@ Checks run sequentially for predictable behavior, logs, cleanup, and evidence. N
 | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | CLI                             | Parse operational options, invoke the scan, and return the final exit code. It contains no check logic.                                                        |
 | Configuration                   | Load strict JSON, `.env`, and process environment values; apply precedence; normalize paths; and expose individual environment references without enumeration. |
-| Scan coordinator                | Execute phases, evaluate prerequisites, isolate failures, and collect results for all four analysis levels.                                                    |
+| Scan coordinator                | Validate shared prerequisites, cache reachability, run the four concurrent level groups, and collect deterministic results.                                    |
 | Project inventory               | Walk the target once and retain categorized paths and metadata, not whole-repository contents.                                                                 |
 | Bounded file reader             | Apply shared exclusions and size limits when checks read file content.                                                                                         |
 | Repository checks               | Inspect source/config inventory, manifests, lockfiles, `.gitignore`, CI, linting, and test presence.                                                           |
@@ -61,29 +59,29 @@ Use a fixed list of plain check functions. External capabilities are passed only
 - GitHub Actions runs the same aggregate `npm run check` command used locally.
 - The Playwright library is installed, but its configuration, browser binaries, and automation boundary remain deferred to the browser milestone.
 
-## Static-First Execution Flow
+## Setup and Concurrent Execution Flow
 
-Static analysis always runs when the target root is readable:
+Sentinel validates the readable target and prepares shared scan context before check execution. Project inventory and stack detection will join this preflight when implemented.
 
-- Build a bounded path and metadata inventory.
-- Detect Node/TypeScript from manifests, lockfiles, and source extensions; otherwise use generic mode.
-- Run repository checks, secret detection, manifest/lock checks, and static debug evidence collection.
-- Discover OpenAPI documents, route candidates, schemas, and tests for API fallback and AI evidence.
+Sentinel then probes only configured API and UI targets:
 
-After static analysis, Sentinel probes only configured API and UI targets:
+- API health and UI base targets receive one bounded `HEAD` request each.
+- API and UI probes run concurrently and are cached for the current scan.
+- Any HTTP response means reachable, including `401`, `404`, and `500`.
+- Connection refusal, DNS/TLS failure, malformed responses, or timeout means unavailable.
+- Missing or unavailable services produce `Skipped / Info` availability notes and do not make the scan incomplete.
 
-- Any HTTP response means the service is reachable, including `401`, `404`, and `500`.
-- Connection refusal, DNS/TLS failure, or timeout means unavailable.
-- A reachable API receives safe runtime checks.
-- An unavailable API receives static fallback analysis.
-- A reachable UI receives Playwright checks.
-- An unavailable UI produces explicit skipped results.
+After probing, Code & Repository, Security, API / Backend, and UI / Browser groups start concurrently. Checks remain sequential within a level. The runner preserves level and registration order, enforces each check timeout with an abort signal, and converts a timeout or exception into one isolated `Skipped / Info` diagnostic row.
+
+Future reachable-service checks consume the cached observations. Unavailable APIs receive static fallback analysis when that milestone is implemented; reachable UIs receive Playwright checks when browser automation is implemented.
 
 Sentinel never scans localhost ports and never starts, stops, or restarts target services.
 
 ## Common Check and Result Model
 
-Each check has a stable ID, title, analysis level, phase, prerequisite rule, and plain check function.
+Each check has a stable ID, title, analysis level, phase, required timeout, and plain function receiving the shared context and a per-check abort signal.
+
+Each check execution returns one or more results plus an explicit incomplete flag. Empty, invalid, or inconsistent output is isolated as a single execution-error result. Handled missing prerequisites remain normal skips, while internal timeouts and execution failures mark the report incomplete.
 
 Each result represents one stable check-and-subject pair and contains:
 
@@ -141,8 +139,8 @@ Sentinel should produce the most complete report possible:
 | Condition                                          | Behavior                                                                             |
 | -------------------------------------------------- | ------------------------------------------------------------------------------------ |
 | No config or runtime URLs                          | Scan the current directory statically; skip affected runtime checks.                 |
-| API unavailable                                    | Record availability and run static API fallback.                                     |
-| UI unavailable                                     | Emit skipped browser results with a reason and recommendation.                       |
+| API unavailable                                    | Emit a normal availability note; run static API fallback when implemented.           |
+| UI unavailable                                     | Emit a normal availability note and skip future browser checks.                      |
 | Authentication absent                              | Run public checks and skip only protected expectations.                              |
 | OpenAPI invalid                                    | Warn and attempt best-effort route/schema fallback.                                  |
 | `package-lock.json` or npm audit unavailable       | Skip vulnerability lookup; never claim the project is clean.                         |
@@ -208,6 +206,8 @@ Automated tests use Vitest. `npm run check` is the milestone-completion gate and
 Required unit tests focus on:
 
 - Configuration precedence and validation.
+- Concurrent level scheduling, sequential per-level order, timeouts, and failure isolation.
+- Central reachability caching and sanitized unavailable observations.
 - Environment-reference resolution and redaction.
 - Result invariants and summary counts.
 - File exclusion and Node detection.
@@ -229,9 +229,9 @@ Live paid-AI calls, live vulnerability databases, full browser matrices, and ext
 
 1. Build a vertical slice: CLI, minimal config, result model, one repository check, and Markdown report.
 2. Perform an early AI risk spike using one fixture, explicit OpenAI and Claude adapters, one selected-provider request, and one cited structured result.
-3. Implement configuration, redaction, inventory, stack detection, and generic repository checks. Configuration is complete; the remaining items are pending.
+3. Implement configuration, the isolated concurrent runner, redaction, inventory, stack detection, and generic repository checks. Configuration and the runner are complete; the remaining items are pending.
 4. Add secret detection and npm-only vulnerability analysis.
-5. Add service probes, shallow OpenAPI fallback, and safe API/security runtime checks.
+5. Add service probes, shallow OpenAPI fallback, and safe API/security runtime checks. Central reachability probing is complete; fallback and runtime assertions are pending.
 6. Add the Playwright lifecycle and required browser checks.
 7. Complete the bounded AI check and no-AI behavior.
 8. Harden tests, generate the demo report, complete the README, and assemble Cursor evidence.

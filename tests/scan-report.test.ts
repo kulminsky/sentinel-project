@@ -7,6 +7,7 @@ import { test } from "vitest";
 
 import { resolveAiSetup } from "../src/ai/config.js";
 import type { AiProviderOutcome } from "../src/ai/provider.js";
+import { createSentinelConfigSchema } from "../src/config/schema.js";
 import { renderMarkdownReport } from "../src/report/markdown.js";
 import { scanProject } from "../src/scan.js";
 import { createFakeAiProvider } from "./support/fake-ai-provider.js";
@@ -23,25 +24,37 @@ async function withTemporaryRepository(
   }
 }
 
+function configForTarget(targetRoot: string) {
+  return createSentinelConfigSchema(targetRoot).parse({
+    target: {
+      root: targetRoot,
+    },
+  });
+}
+
 test("scanProject passes when a repository README is present", async () => {
   await withTemporaryRepository(async (targetRoot) => {
     await writeFile(join(targetRoot, "README.md"), "# Fixture\n", "utf8");
 
-    const report = await scanProject(targetRoot);
+    const report = await scanProject(configForTarget(targetRoot));
 
     assert.equal(report.incomplete, false);
-    assert.equal(report.results.length, 2);
+    assert.equal(report.results.length, 4);
     assert.equal(report.results[0]?.checkId, "repository.readme");
     assert.equal(report.results[0]?.status, "Pass");
-    assert.equal(report.results[1]?.checkId, "ai.api-test-gap");
-    assert.equal(report.results[1]?.status, "Skipped");
-    assert.equal(report.results[1]?.diagnosticCode, "AI_DISABLED");
+    assert.equal(report.results[1]?.checkId, "api.service-availability");
+    assert.equal(report.results[1]?.diagnosticCode, "SERVICE_NOT_CONFIGURED");
+    assert.equal(report.results[2]?.checkId, "ai.api-test-gap");
+    assert.equal(report.results[2]?.status, "Skipped");
+    assert.equal(report.results[2]?.diagnosticCode, "AI_DISABLED");
+    assert.equal(report.results[3]?.checkId, "ui.service-availability");
+    assert.equal(report.results[3]?.diagnosticCode, "SERVICE_NOT_CONFIGURED");
   });
 });
 
 test("scanProject warns when a repository README is absent", async () => {
   await withTemporaryRepository(async (targetRoot) => {
-    const report = await scanProject(targetRoot);
+    const report = await scanProject(configForTarget(targetRoot));
 
     assert.equal(report.incomplete, false);
     assert.equal(report.results[0]?.status, "Warn");
@@ -53,12 +66,15 @@ test("renderMarkdownReport includes the required result fields and summary", asy
   await withTemporaryRepository(async (targetRoot) => {
     await writeFile(join(targetRoot, "README.md"), "# Fixture\n", "utf8");
 
-    const markdown = renderMarkdownReport(await scanProject(targetRoot));
+    const markdown = renderMarkdownReport(
+      await scanProject(configForTarget(targetRoot)),
+    );
 
     assert.match(markdown, /## Overall Summary/);
     assert.match(markdown, /\*\*Status counts:\*\* Pass 1/);
-    assert.match(markdown, /Skipped 1/);
+    assert.match(markdown, /Skipped 3/);
     assert.match(markdown, /\*\*Status:\*\* Pass/);
+    assert.match(markdown, /\*\*Duration:\*\* \d+ ms/);
     assert.match(markdown, /\*\*Finding:\*\*/);
     assert.match(markdown, /\*\*Severity:\*\* Info/);
     assert.match(markdown, /\*\*Recommendation:\*\*/);
@@ -87,7 +103,7 @@ test("scanProject appends one valid AI result without affecting repository check
     };
     const fake = createFakeAiProvider(outcome);
 
-    const report = await scanProject(targetRoot, {
+    const report = await scanProject(configForTarget(targetRoot), {
       ai: {
         kind: "ready",
         provider: fake.provider,
@@ -97,11 +113,16 @@ test("scanProject appends one valid AI result without affecting repository check
     assert.equal(report.incomplete, false);
     assert.deepEqual(
       report.results.map((result) => result.checkId),
-      ["repository.readme", "ai.api-test-gap"],
+      [
+        "repository.readme",
+        "api.service-availability",
+        "ai.api-test-gap",
+        "ui.service-availability",
+      ],
     );
     assert.deepEqual(
       report.results.map((result) => result.status),
-      ["Pass", "Fail"],
+      ["Pass", "Skipped", "Fail", "Skipped"],
     );
   });
 });
@@ -152,7 +173,7 @@ test("provider credentials never appear in normalized or rendered output", async
         ),
     );
 
-    const report = await scanProject(targetRoot, { ai });
+    const report = await scanProject(configForTarget(targetRoot), { ai });
     const markdown = renderMarkdownReport(report);
 
     assert.equal(JSON.stringify(report).includes(credential), false);
@@ -168,7 +189,7 @@ test("an AI execution failure leaves repository results intact and marks the sca
       diagnosticCode: "AI_PROVIDER_ERROR",
     });
 
-    const report = await scanProject(targetRoot, {
+    const report = await scanProject(configForTarget(targetRoot), {
       ai: {
         kind: "ready",
         provider: fake.provider,
@@ -177,7 +198,7 @@ test("an AI execution failure leaves repository results intact and marks the sca
 
     assert.equal(report.incomplete, true);
     assert.equal(report.results[0]?.status, "Pass");
-    assert.equal(report.results[1]?.status, "Skipped");
-    assert.equal(report.results[1]?.diagnosticCode, "AI_PROVIDER_ERROR");
+    assert.equal(report.results[2]?.status, "Skipped");
+    assert.equal(report.results[2]?.diagnosticCode, "AI_PROVIDER_ERROR");
   });
 });

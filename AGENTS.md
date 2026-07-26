@@ -8,7 +8,7 @@ These instructions apply to the entire repository.
 - Avoid speculative abstractions, class hierarchies, plugin systems, dependency-injection containers, and unrequested flexibility.
 - Do not expand supported stacks, report formats, providers, browsers, or runtime behavior without explicit approval.
 - Never hardcode target URLs, ports, filesystem paths, endpoint parameters, credentials, or authentication values.
-- Preserve static-first execution and graceful degradation. Missing services or optional credentials must not crash a scan.
+- Preserve centralized setup, cached reachability, concurrent analysis-level execution, and graceful degradation. Checks remain sequential within each level; missing services or optional credentials must not crash a scan.
 - Keep all browser automation in Playwright.
 - Keep runtime API checks read-only and never start target services.
 - Never include repository or target secrets in prompts, request bodies, response evidence, reports, logs, or persisted evidence without redaction.

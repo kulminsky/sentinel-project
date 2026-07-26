@@ -1,5 +1,6 @@
 import { readdir } from "node:fs/promises";
 
+import type { Check } from "../core/check.js";
 import { createCheckResult, type CheckResult } from "../core/result.js";
 
 const README_NAMES = new Set([
@@ -48,3 +49,15 @@ export async function checkRepositoryReadme(
     }),
   ];
 }
+
+export const repositoryReadmeCheck: Check = {
+  id: "repository.readme",
+  title: "Repository README",
+  level: "Code & Repository",
+  phase: "static",
+  timeoutMs: 5_000,
+  run: async (context) => ({
+    results: await checkRepositoryReadme(context.config.target.root),
+    incomplete: false,
+  }),
+};

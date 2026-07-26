@@ -21,8 +21,9 @@ async function main(options: CliOptions): Promise<void> {
         }),
     environment: process.env,
   });
-  const report = await scanProject(loaded.config.target.root, {
+  const report = await scanProject(loaded.config, {
     ai: resolveAiSetup(loaded.config.ai, loaded.resolveEnvironmentReference),
+    resolveEnvironmentReference: loaded.resolveEnvironmentReference,
   });
 
   await writeMarkdownReport(report, loaded.config.report.path);

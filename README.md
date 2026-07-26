@@ -8,7 +8,7 @@ Deliver a polished, reviewable MVP that demonstrates deliberate quality-engineer
 
 ## Current Status
 
-**Foundation, AI feasibility, tooling scaffold, and configuration milestones complete.**
+**Foundation, AI feasibility, tooling, configuration, and concurrent-runner milestones complete.**
 
 Sentinel currently:
 
@@ -16,6 +16,8 @@ Sentinel currently:
 - Uses Commander for CLI behavior and one strict Zod configuration boundary.
 - Loads strict JSON, `.env`, and process-environment configuration with path-specific fatal errors.
 - Scans the configured target root, defaulting to the invocation directory.
+- Probes configured API and UI services once with bounded, read-only `HEAD` requests and reports missing or unreachable services as notes.
+- Runs the four analysis-level groups concurrently, keeps checks sequential within each level, and isolates every check with its own timeout.
 - Checks whether a recognized README exists at the repository root.
 - Runs or gracefully skips one synthetic semantic API test-gap check.
 - Supports explicit OpenAI or Claude selection for that synthetic check.
@@ -23,7 +25,7 @@ Sentinel currently:
 - Produces a structured Markdown report with summary, status, severity, finding, and recommendation fields.
 - Returns a nonzero exit code only when configuration cannot be loaded, the scan cannot run, or the report cannot be written.
 
-Stack detection, broader repository/security checks, runtime checks, Playwright browser automation, and production repository evidence selection are not implemented yet. API and UI configuration is validated but not consumed. The Playwright library is installed for the planned browser milestone, but browser binaries are intentionally not installed.
+Stack detection, broader repository/security checks, API assertions, static API fallback, Playwright browser automation, and production repository evidence selection are not implemented yet. API/UI endpoint, page, authentication, viewport, and form-flow settings remain dormant; only service targets and timeouts drive reachability probes. The Playwright library is installed for the planned browser milestone, but browser binaries are intentionally not installed.
 
 ## Development Setup
 
@@ -73,7 +75,7 @@ npm start -- --config ./path/to/sentinel.config.json
 
 Configuration is recursively strict. Invalid values, incomplete supplied sections, and unknown keys stop the scan with a property-specific error; Sentinel never silently replaces invalid configuration with defaults.
 
-See [`docs/configuration.md`](docs/configuration.md) for the complete JSON contract, environment mappings, precedence, path resolution, and credential-reference rules. API and UI values are accepted for forward compatibility but are not executed yet.
+See [`docs/configuration.md`](docs/configuration.md) for the complete JSON contract, environment mappings, precedence, path resolution, and credential-reference rules. API/UI targets and timeouts support central reachability probing; their detailed runtime and browser settings are not executed yet.
 
 ## Synthetic AI Feasibility Check
 
@@ -110,7 +112,7 @@ These documents are the source of truth until an approved decision is deliberate
 - Prefer KISS, plain functions, composition, and small explicit boundaries.
 - Avoid speculative abstractions and unrequested flexibility.
 - Keep target-specific URLs, ports, paths, parameters, and credentials outside production source.
-- Preserve static-first execution and graceful degradation.
+- Preserve centralized setup, one cached service probe per configured target, concurrent analysis levels, and sequential checks within each level.
 - Keep runtime checks read-only and never start target services.
 - Use Playwright for all browser automation.
 - Redact repository and target secrets before logging, reporting, persistence, or AI evidence transmission; use provider credentials only as authentication headers.
@@ -124,7 +126,7 @@ The approved MVP is scoped to:
 - A TypeScript CLI with a Markdown report.
 - Generic static repository and security analysis for readable local projects.
 - Deeper Node.js/npm analysis when a Node project is detected.
-- Static-first execution with conditional API and browser checks.
+- Centralized setup and reachability probing followed by concurrent analysis-level execution and conditional API/browser checks.
 - Shallow OpenAPI analysis and read-only runtime API requests.
 - Playwright-based Chromium checks for explicitly configured pages and flows.
 - One selected-provider, bounded LLM-based semantic test-gap analysis using OpenAI or Claude.
@@ -139,7 +141,7 @@ This list describes the approved implementation target, not functionality curren
 2. **Complete:** Validate the bounded multi-provider AI approach with an early synthetic risk spike.
 3. **In progress:** Configuration is complete; add redaction, project inventory, stack detection, and generic repository checks.
 4. Add secret detection and npm-only vulnerability analysis.
-5. Add service probing, shallow API fallback, and safe API/security runtime checks.
+5. **In progress:** Service reachability is complete; add shallow API fallback and safe API/security runtime checks.
 6. Add the Playwright lifecycle and required browser checks.
 7. Complete AI integration and no-AI fallback behavior.
 8. Harden tests and complete the demo, sample report, documentation, and process evidence.
@@ -164,14 +166,20 @@ The repository currently contains the foundation implementation and its document
 │   │   ├── openai.ts
 │   │   └── provider.ts
 │   ├── checks/
-│   │   └── repository-readme.ts
+│   │   ├── registry.ts
+│   │   ├── repository-readme.ts
+│   │   └── service-availability.ts
 │   ├── config/
 │   │   ├── load.ts
 │   │   └── schema.ts
 │   ├── core/
-│   │   └── result.ts
+│   │   ├── check.ts
+│   │   ├── result.ts
+│   │   └── runner.ts
 │   ├── report/
 │   │   └── markdown.ts
+│   ├── runtime/
+│   │   └── reachability.ts
 │   ├── cli.ts
 │   └── scan.ts
 ├── tests/
@@ -183,7 +191,9 @@ The repository currently contains the foundation implementation and its document
 │   ├── cli.test.ts
 │   ├── config-load.test.ts
 │   ├── config-schema.test.ts
+│   ├── reachability.test.ts
 │   ├── result.test.ts
+│   ├── runner.test.ts
 │   └── scan-report.test.ts
 ├── .prettierignore
 ├── .prettierrc.json
@@ -220,8 +230,9 @@ For each milestone:
 - **Foundation — complete:** executable project skeleton, common result model, one repository check, and Markdown reporting.
 - **Tooling — complete:** reproducible npm setup, CLI/config libraries, Vitest, linting, formatting, and CI checks; Playwright browser installation remains deferred.
 - **Configuration — complete:** strict JSON and environment loading, normalized target/report paths, source precedence, and fatal path-specific validation.
+- **Core runner — complete:** four concurrent analysis-level groups, sequential per-level checks, per-check timeouts, isolated failures, and deterministic ordering.
 - **Static analysis:** repository inventory, Node detection, repository checks, and security checks.
-- **Runtime analysis:** service detection, API fallback/runtime checks, and Playwright checks.
+- **Runtime analysis:** centralized API/UI reachability is complete; API fallback/assertions and Playwright checks remain planned.
 - **AI analysis:** synthetic multi-provider feasibility is complete; production evidence selection and redaction remain planned.
 - **Submission readiness:** tests, demo target, sample report, documentation, and process evidence.
 

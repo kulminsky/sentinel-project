@@ -117,7 +117,7 @@ All objects are strict: unknown keys are rejected, including inside endpoints, a
 - UI configuration requires exactly two distinctly named viewports.
 - An endpoint, page, or form flow with `useAuthentication: true` requires the corresponding API or UI authentication block.
 
-API/UI configuration is currently validated and normalized but is not executed until the runtime and Playwright milestones.
+API/UI base targets and timeouts currently drive one central, read-only reachability probe per configured service. Endpoint expectations, authentication, pages, viewports, and form flows are validated but remain dormant until their runtime and Playwright milestones.
 
 ## Authentication Shapes
 

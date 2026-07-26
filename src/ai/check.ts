@@ -3,6 +3,7 @@ import {
   type CheckResult,
   type Severity,
 } from "../core/result.js";
+import type { Check } from "../core/check.js";
 import type { AiCheckSetup, AiPrerequisiteCode } from "./config.js";
 import { SYNTHETIC_AI_EVIDENCE } from "./fixture.js";
 import type {
@@ -362,3 +363,18 @@ export async function runSyntheticAiCheck(
     incomplete: false,
   };
 }
+
+export const syntheticAiCheck: Check = {
+  id: "ai.api-test-gap",
+  title: "AI API test-gap analysis",
+  level: "API / Backend",
+  phase: "AI",
+  timeoutMs: 25_000,
+  run: async (context) => {
+    const execution = await runSyntheticAiCheck(context.ai);
+    return {
+      results: [execution.result],
+      incomplete: execution.incomplete,
+    };
+  },
+};
