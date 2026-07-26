@@ -1,0 +1,28 @@
+# Sentinel Agent Instructions
+
+These instructions apply to the entire repository.
+
+- Treat `docs/architecture.md` and `docs/decisions.md` as the approved source of truth.
+- Keep each change limited to the current requested milestone and stop when that milestone is complete.
+- Prefer KISS, plain functions, fixed check registration, and small explicit boundaries.
+- Avoid speculative abstractions, class hierarchies, plugin systems, dependency-injection containers, and unrequested flexibility.
+- Do not expand supported stacks, report formats, providers, browsers, or runtime behavior without explicit approval.
+- Never hardcode target URLs, ports, filesystem paths, endpoint parameters, credentials, or authentication values.
+- Preserve static-first execution and graceful degradation. Missing services or optional credentials must not crash a scan.
+- Keep all browser automation in Playwright.
+- Keep runtime API checks read-only and never start target services.
+- Never log, report, persist, or send secrets without redaction.
+- Distinguish internal execution errors from normal skipped checks and preserve the approved exit-code behavior.
+- Run the smallest relevant test set after each change; run broader tests before milestone completion.
+- At handoff, summarize changed files, tests run, documentation review, and remaining limitations.
+- Do not begin the next milestone or add stretch work unless explicitly requested.
+
+## Documentation Maintenance
+
+Documentation is part of implementation, not final cleanup.
+
+- Keep documentation synchronized continuously and review affected documentation before completing every task or milestone.
+- Update only documentation affected by the current change; never describe functionality that is not implemented.
+- Remove obsolete or conflicting guidance instead of retaining parallel versions.
+- Keep `README.md`, `docs/architecture.md`, `docs/decisions.md`, and implementation instructions consistent with the codebase.
+- Treat documentation review as part of the Definition of Done and explicitly state when it was reviewed but no update was required.
