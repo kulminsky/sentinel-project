@@ -1,6 +1,6 @@
 # Sentinel
 
-Sentinel is a planned TypeScript CLI for reviewing the quality of local software projects through static analysis and, when configured services are available, safe runtime checks.
+Sentinel is a TypeScript CLI under active development for reviewing the quality of local software projects.
 
 ## Project Goal
 
@@ -8,9 +8,45 @@ Deliver a polished, reviewable MVP that demonstrates deliberate quality-engineer
 
 ## Current Status
 
-**Planning complete; implementation starting.**
+**Foundation milestone complete.**
 
-The project scope, architecture, and implementation constraints have been reviewed and approved. No production functionality has been implemented yet.
+Sentinel currently:
+
+- Compiles to a runnable Node.js CLI.
+- Scans the current working directory.
+- Checks whether a recognized README exists at the repository root.
+- Produces a structured Markdown report with summary, status, severity, finding, and recommendation fields.
+- Returns a nonzero exit code only when the scan cannot run or the report cannot be written.
+
+Configuration, stack detection, broader repository/security checks, runtime checks, Playwright, and AI are not implemented yet.
+
+## Development Setup
+
+Prerequisites:
+
+- Node.js 20 or later.
+- npm.
+
+Install dependencies and build the project:
+
+```sh
+npm install
+npm run build
+```
+
+Run the current scan against the repository in the current working directory:
+
+```sh
+npm start
+```
+
+The command writes `sentinel-report.md` in the current working directory.
+
+Run the implemented validation checks:
+
+```sh
+npm test
+```
 
 ## Architecture Documents
 
@@ -51,7 +87,7 @@ This list describes the approved implementation target, not functionality curren
 
 ## Planned Milestones
 
-1. Establish the CLI-to-report vertical slice.
+1. **Complete:** Establish the CLI-to-report vertical slice.
 2. Validate the bounded AI approach with an early risk spike.
 3. Add configuration, redaction, project inventory, stack detection, and generic repository checks.
 4. Add secret detection and npm-only vulnerability analysis.
@@ -64,18 +100,34 @@ Stretch work begins only after all required milestones and submission artifacts 
 
 ## Project Structure
 
-The repository currently contains planning and governance documentation:
+The repository currently contains the foundation implementation and its documentation:
 
 ```text
 .
+├── src/
+│   ├── checks/
+│   │   └── repository-readme.ts
+│   ├── core/
+│   │   └── result.ts
+│   ├── report/
+│   │   └── markdown.ts
+│   ├── cli.ts
+│   └── scan.ts
+├── tests/
+│   ├── result.test.ts
+│   └── scan-report.test.ts
 ├── AGENTS.md
 ├── README.md
-└── docs/
-    ├── architecture.md
-    └── decisions.md
+├── docs/
+│   ├── architecture.md
+│   └── decisions.md
+├── .gitignore
+├── package-lock.json
+├── package.json
+└── tsconfig.json
 ```
 
-Implementation directories will be added incrementally as their milestones begin. The approved conceptual structure is documented in `docs/architecture.md`; empty scaffolding is intentionally avoided.
+Additional implementation directories will be added only as their milestones begin. The approved conceptual structure is documented in `docs/architecture.md`; empty scaffolding is intentionally avoided.
 
 ## Development Workflow
 
@@ -92,7 +144,7 @@ For each milestone:
 
 ## Roadmap
 
-- **Foundation:** executable project skeleton, common result model, and Markdown reporting.
+- **Foundation — complete:** executable project skeleton, common result model, one repository check, and Markdown reporting.
 - **Static analysis:** configuration, repository inventory, Node detection, repository checks, and security checks.
 - **Runtime analysis:** service detection, API fallback/runtime checks, and Playwright checks.
 - **AI analysis:** bounded semantic test-gap analysis with safe fallback behavior.
@@ -104,7 +156,7 @@ This README should grow with implemented behavior rather than describe planned f
 
 | Milestone | README sections to complete or update |
 |---|---|
-| Foundation | Update Current Status and Project Structure; add installation and the first verified command only after they work. |
+| Foundation | Completed: Current Status, Development Setup, Project Structure, and the first verified command now reflect the implementation. |
 | Configuration and static analysis | Update Current Status and MVP Scope; add configuration and supported-check documentation based on implemented behavior. |
 | API runtime and fallback | Update MVP Scope and Project Structure; document verified runtime prerequisites and degradation behavior. |
 | Playwright | Update MVP Scope; document supported browser checks and any verified limitations. |
