@@ -1,24 +1,11 @@
-import { z } from "zod";
-
+import type { SentinelConfig } from "../config/schema.js";
 import { createClaudeProvider } from "./claude.js";
 import { createOpenAiProvider } from "./openai.js";
 import type { AiProvider, FetchLike } from "./provider.js";
 
-const aiEnvironmentSchema = z.object({
-  SENTINEL_AI_ENABLED: z
-    .string()
-    .optional()
-    .transform((value) => value === "true"),
-  SENTINEL_AI_PROVIDER: z.string().optional(),
-  OPENAI_API_KEY: z.string().optional(),
-  ANTHROPIC_API_KEY: z.string().optional(),
-});
+export type AiPrerequisiteCode = "AI_DISABLED" | "AI_CREDENTIAL_MISSING";
 
-export type AiPrerequisiteCode =
-  | "AI_DISABLED"
-  | "AI_PROVIDER_NOT_SELECTED"
-  | "AI_PROVIDER_UNSUPPORTED"
-  | "AI_CREDENTIAL_MISSING";
+export type EnvironmentReferenceResolver = (name: string) => string | undefined;
 
 export type AiCheckSetup =
   | {
@@ -43,28 +30,17 @@ export function disabledAiSetup(): AiCheckSetup {
 }
 
 export function resolveAiSetup(
-  environment: NodeJS.ProcessEnv,
+  config: SentinelConfig["ai"],
+  resolveEnvironmentReference: EnvironmentReferenceResolver,
   fetchImplementation: FetchLike = fetch,
 ): AiCheckSetup {
-  const config = aiEnvironmentSchema.parse(environment);
-
-  if (!config.SENTINEL_AI_ENABLED) {
+  if (!config.enabled) {
     return disabledAiSetup();
   }
 
-  const providerName = config.SENTINEL_AI_PROVIDER;
-  if (!providerName) {
-    return {
-      kind: "skipped",
-      diagnosticCode: "AI_PROVIDER_NOT_SELECTED",
-      finding: "AI analysis is enabled, but no provider was selected.",
-      recommendation: "Set SENTINEL_AI_PROVIDER to either openai or claude.",
-    };
-  }
-
-  switch (providerName) {
+  switch (config.provider) {
     case "openai": {
-      const credential = config.OPENAI_API_KEY;
+      const credential = resolveEnvironmentReference("OPENAI_API_KEY");
       if (!credential) {
         return {
           kind: "skipped",
@@ -82,7 +58,7 @@ export function resolveAiSetup(
       };
     }
     case "claude": {
-      const credential = config.ANTHROPIC_API_KEY;
+      const credential = resolveEnvironmentReference("ANTHROPIC_API_KEY");
       if (!credential) {
         return {
           kind: "skipped",
@@ -99,13 +75,5 @@ export function resolveAiSetup(
         provider: createClaudeProvider(credential, fetchImplementation),
       };
     }
-    default:
-      return {
-        kind: "skipped",
-        diagnosticCode: "AI_PROVIDER_UNSUPPORTED",
-        finding:
-          "AI analysis is enabled, but the selected provider is unsupported.",
-        recommendation: "Set SENTINEL_AI_PROVIDER to either openai or claude.",
-      };
   }
 }

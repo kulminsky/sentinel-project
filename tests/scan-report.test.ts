@@ -112,10 +112,10 @@ test("provider credentials never appear in normalized or rendered output", async
     const credential = randomUUID();
     const ai = resolveAiSetup(
       {
-        SENTINEL_AI_ENABLED: "true",
-        SENTINEL_AI_PROVIDER: "openai",
-        OPENAI_API_KEY: credential,
+        enabled: true,
+        provider: "openai",
       },
+      (name) => (name === "OPENAI_API_KEY" ? credential : undefined),
       () =>
         Promise.resolve(
           new Response(

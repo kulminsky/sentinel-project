@@ -11,9 +11,10 @@ const unreachableFetch: FetchLike = () =>
 test("AI remains disabled unless it is explicitly enabled", () => {
   const setup = resolveAiSetup(
     {
-      SENTINEL_AI_PROVIDER: "openai",
-      OPENAI_API_KEY: randomUUID(),
+      enabled: false,
+      provider: "openai",
     },
+    () => randomUUID(),
     unreachableFetch,
   );
 
@@ -23,73 +24,25 @@ test("AI remains disabled unless it is explicitly enabled", () => {
   }
 });
 
-test("AI enablement normalization preserves exact opt-in behavior", () => {
-  const explicitFalse = resolveAiSetup(
-    {
-      SENTINEL_AI_ENABLED: "false",
-      SENTINEL_AI_PROVIDER: "openai",
-      OPENAI_API_KEY: randomUUID(),
-    },
-    unreachableFetch,
-  );
-  const unsupportedCasing = resolveAiSetup(
-    {
-      SENTINEL_AI_ENABLED: "TRUE",
-      SENTINEL_AI_PROVIDER: "openai",
-      OPENAI_API_KEY: randomUUID(),
-    },
-    unreachableFetch,
-  );
-
-  assert.equal(explicitFalse.kind, "skipped");
-  assert.equal(unsupportedCasing.kind, "skipped");
-  if (
-    explicitFalse.kind === "skipped" &&
-    unsupportedCasing.kind === "skipped"
-  ) {
-    assert.equal(explicitFalse.diagnosticCode, "AI_DISABLED");
-    assert.equal(unsupportedCasing.diagnosticCode, "AI_DISABLED");
-  }
-});
-
-test("enabled AI requires an explicit supported provider", () => {
-  const missing = resolveAiSetup(
-    {
-      SENTINEL_AI_ENABLED: "true",
-    },
-    unreachableFetch,
-  );
-  const unsupported = resolveAiSetup(
-    {
-      SENTINEL_AI_ENABLED: "true",
-      SENTINEL_AI_PROVIDER: "OPENAI",
-    },
-    unreachableFetch,
-  );
-
-  assert.equal(missing.kind, "skipped");
-  assert.equal(unsupported.kind, "skipped");
-  if (missing.kind === "skipped" && unsupported.kind === "skipped") {
-    assert.equal(missing.diagnosticCode, "AI_PROVIDER_NOT_SELECTED");
-    assert.equal(unsupported.diagnosticCode, "AI_PROVIDER_UNSUPPORTED");
-  }
-});
-
 test("each provider requires only its own credential", () => {
+  const credentials = new Map([
+    ["OPENAI_API_KEY", undefined],
+    ["ANTHROPIC_API_KEY", undefined],
+  ]);
   const openAi = resolveAiSetup(
     {
-      SENTINEL_AI_ENABLED: "true",
-      SENTINEL_AI_PROVIDER: "openai",
-      ANTHROPIC_API_KEY: randomUUID(),
+      enabled: true,
+      provider: "openai",
     },
+    (name) => credentials.get(name),
     unreachableFetch,
   );
   const claude = resolveAiSetup(
     {
-      SENTINEL_AI_ENABLED: "true",
-      SENTINEL_AI_PROVIDER: "claude",
-      OPENAI_API_KEY: randomUUID(),
+      enabled: true,
+      provider: "claude",
     },
+    (name) => credentials.get(name),
     unreachableFetch,
   );
 
@@ -102,20 +55,24 @@ test("each provider requires only its own credential", () => {
 });
 
 test("OpenAI and Claude can each be selected explicitly", () => {
+  const credentials = new Map([
+    ["OPENAI_API_KEY", randomUUID()],
+    ["ANTHROPIC_API_KEY", randomUUID()],
+  ]);
   const openAi = resolveAiSetup(
     {
-      SENTINEL_AI_ENABLED: "true",
-      SENTINEL_AI_PROVIDER: "openai",
-      OPENAI_API_KEY: randomUUID(),
+      enabled: true,
+      provider: "openai",
     },
+    (name) => credentials.get(name),
     unreachableFetch,
   );
   const claude = resolveAiSetup(
     {
-      SENTINEL_AI_ENABLED: "true",
-      SENTINEL_AI_PROVIDER: "claude",
-      ANTHROPIC_API_KEY: randomUUID(),
+      enabled: true,
+      provider: "claude",
     },
+    (name) => credentials.get(name),
     unreachableFetch,
   );
 

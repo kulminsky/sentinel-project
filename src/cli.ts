@@ -1,32 +1,41 @@
 #!/usr/bin/env node
 
-import { resolve } from "node:path";
-
 import { Command } from "commander";
 
 import { resolveAiSetup } from "./ai/config.js";
+import { loadSentinelConfig } from "./config/load.js";
 import { writeMarkdownReport } from "./report/markdown.js";
 import { scanProject } from "./scan.js";
 
-const DEFAULT_REPORT_NAME = "sentinel-report.md";
+interface CliOptions {
+  config?: string;
+}
 
-async function main(): Promise<void> {
-  const targetRoot = process.cwd();
-  const outputPath = resolve(targetRoot, DEFAULT_REPORT_NAME);
-  const report = await scanProject(targetRoot, {
-    ai: resolveAiSetup(process.env),
+async function main(options: CliOptions): Promise<void> {
+  const loaded = await loadSentinelConfig({
+    cwd: process.cwd(),
+    ...(options.config === undefined
+      ? {}
+      : {
+          configPath: options.config,
+        }),
+    environment: process.env,
+  });
+  const report = await scanProject(loaded.config.target.root, {
+    ai: resolveAiSetup(loaded.config.ai, loaded.resolveEnvironmentReference),
   });
 
-  await writeMarkdownReport(report, outputPath);
-  console.log(`Sentinel report written to ${outputPath}`);
+  await writeMarkdownReport(report, loaded.config.report.path);
+  console.log(`Sentinel report written to ${loaded.config.report.path}`);
 }
 
 const program = new Command()
   .name("sentinel")
   .description("Scan a local project and produce a quality report.")
+  .option("-c, --config <path>", "load configuration from a JSON file")
   .showHelpAfterError()
   .allowExcessArguments(false)
-  .action(main);
+  .action(() => main(program.opts<CliOptions>()));
 
 program.parseAsync().catch((error: unknown) => {
   const message = error instanceof Error ? error.message : "Unknown error";

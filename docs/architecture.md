@@ -34,28 +34,28 @@ Checks run sequentially for predictable behavior, logs, cleanup, and evidence. N
 
 ## Module Boundaries
 
-| Boundary                        | Responsibility                                                                                                                |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| CLI                             | Parse operational options, invoke the scan, and return the final exit code. It contains no check logic.                       |
-| Configuration                   | Load JSON, `.env`, and process environment values; apply precedence; validate; normalize; and register secrets for redaction. |
-| Scan coordinator                | Execute phases, evaluate prerequisites, isolate failures, and collect results for all four analysis levels.                   |
-| Project inventory               | Walk the target once and retain categorized paths and metadata, not whole-repository contents.                                |
-| Bounded file reader             | Apply shared exclusions and size limits when checks read file content.                                                        |
-| Repository checks               | Inspect source/config inventory, manifests, lockfiles, `.gitignore`, CI, linting, and test presence.                          |
-| Security checks                 | Perform secret detection, npm vulnerability analysis, security-header checks, and evidence-derived debug checks.              |
-| Service probe and HTTP boundary | Determine reachability and perform bounded, read-only HTTP requests. It returns observations rather than policy decisions.    |
-| API checks                      | Interpret API observations and shallow OpenAPI or route evidence.                                                             |
-| Playwright boundary             | Own Chromium lifecycle, contexts, authentication state, timeouts, axe integration, and browser observations.                  |
-| AI boundary                     | Select and redact bounded evidence, make one provider request, and validate cited structured output.                          |
-| Result model                    | Enforce status, severity, evidence, redaction, and diagnostic invariants.                                                     |
-| Report module                   | Sort results, calculate counts, describe incomplete execution, and render Markdown.                                           |
+| Boundary                        | Responsibility                                                                                                                                                 |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CLI                             | Parse operational options, invoke the scan, and return the final exit code. It contains no check logic.                                                        |
+| Configuration                   | Load strict JSON, `.env`, and process environment values; apply precedence; normalize paths; and expose individual environment references without enumeration. |
+| Scan coordinator                | Execute phases, evaluate prerequisites, isolate failures, and collect results for all four analysis levels.                                                    |
+| Project inventory               | Walk the target once and retain categorized paths and metadata, not whole-repository contents.                                                                 |
+| Bounded file reader             | Apply shared exclusions and size limits when checks read file content.                                                                                         |
+| Repository checks               | Inspect source/config inventory, manifests, lockfiles, `.gitignore`, CI, linting, and test presence.                                                           |
+| Security checks                 | Perform secret detection, npm vulnerability analysis, security-header checks, and evidence-derived debug checks.                                               |
+| Service probe and HTTP boundary | Determine reachability and perform bounded, read-only HTTP requests. It returns observations rather than policy decisions.                                     |
+| API checks                      | Interpret API observations and shallow OpenAPI or route evidence.                                                                                              |
+| Playwright boundary             | Own Chromium lifecycle, contexts, authentication state, timeouts, axe integration, and browser observations.                                                   |
+| AI boundary                     | Select and redact bounded evidence, make one provider request, and validate cited structured output.                                                           |
+| Result model                    | Enforce status, severity, evidence, redaction, and diagnostic invariants.                                                                                      |
+| Report module                   | Sort results, calculate counts, describe incomplete execution, and render Markdown.                                                                            |
 
 Use a fixed list of plain check functions. External capabilities are passed only to modules that need them; there is no dependency-injection container, dynamic plugin registry, or class hierarchy.
 
 ## Implemented Tooling Baseline
 
 - The CLI uses Commander while keeping check logic outside the command boundary.
-- Zod validates and normalizes the currently implemented AI environment values; the broader configuration milestone remains pending.
+- One recursively strict Zod schema validates and normalizes target, report, API, UI, and AI configuration.
 - TypeScript is strict, ESM, and compiled with `NodeNext` for Node.js 20.19 or later.
 - Vitest runs source tests, while ESLint and Prettier enforce static quality and formatting.
 - GitHub Actions runs the same aggregate `npm run check` command used locally.
@@ -108,41 +108,49 @@ Result rules:
 
 ## Configuration
 
-The optional `sentinel.config.json` contains only MVP settings for:
+The implemented loader reads optional `sentinel.config.json` and `.env` files from the invocation directory. `--config <path>` selects another JSON file and makes its directory the base for explicitly configured relative filesystem paths. Omitted target and report settings retain their invocation-directory defaults.
+
+The strict schema contains MVP settings for:
 
 - Target and report locations.
 - API base URL, health path, safe endpoints, expectations, timeouts, latency thresholds, and authentication references.
 - UI base URL, pages, two viewports, storage state or header references, and bounded form flows.
-- AI enablement, provider/model settings, credential reference, timeout, and input limit.
+- AI enablement and explicit provider selection; provider credentials and safety limits retain their existing fixed boundaries.
 
 Configuration precedence is:
 
 1. Existing process environment.
 2. `.env`.
 3. `sentinel.config.json`.
-4. Safe built-in defaults.
+4. The two clean-run target and report defaults.
 
-Credentials are resolved from environment-variable references and must never be written to reports or logs. Target URLs, ports, paths, credentials, endpoint parameters, and authentication values must not be hardcoded in production source.
+The only defaults are the invocation directory for `target.root` and `sentinel-report.md` for `report.path`. API and UI sections are optional, but every value inside a supplied section is required according to the schema. Unknown keys and invalid, incomplete, unreadable, or malformed configuration are fatal path-specific errors; the loader never drops a bad section or falls back after validation fails.
+
+Credentials are resolved through environment-variable references and must never be written to reports or logs. Target URLs, ports, paths, credentials, endpoint parameters, and authentication values must not be hardcoded in production source.
+
+The future redaction milestone will register only explicitly referenced values at the boundary that needs them; the configuration loader will not expose or enumerate the merged environment.
 
 Rule customization, custom secret-pattern languages, and per-check plugin configuration are outside the MVP.
+
+API and UI configuration is currently validated but remains dormant until the runtime and Playwright milestones. The complete implemented contract is documented in `docs/configuration.md`.
 
 ## Graceful Degradation
 
 Sentinel should produce the most complete report possible:
 
-| Condition                                              | Behavior                                                                             |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------------ |
-| No config or runtime URLs                              | Scan the current directory statically; skip affected runtime checks.                 |
-| API unavailable                                        | Record availability and run static API fallback.                                     |
-| UI unavailable                                         | Emit skipped browser results with a reason and recommendation.                       |
-| Authentication absent                                  | Run public checks and skip only protected expectations.                              |
-| OpenAPI invalid                                        | Warn and attempt best-effort route/schema fallback.                                  |
-| `package-lock.json` or npm audit unavailable           | Skip vulnerability lookup; never claim the project is clean.                         |
-| Playwright launch fails                                | Continue other checks and mark the scan incomplete.                                  |
-| AI disabled, provider unselected, or credential absent | Skip only the AI check; the scan remains complete.                                   |
-| AI provider timeout/failure or invalid response        | Skip only the AI check, continue deterministic checks, and mark the scan incomplete. |
-| Individual check throws                                | Emit a redacted execution diagnostic and mark the overall scan incomplete.           |
-| Target root unreadable or report cannot be written     | Treat as a fatal tool error.                                                         |
+| Condition                                          | Behavior                                                                             |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| No config or runtime URLs                          | Scan the current directory statically; skip affected runtime checks.                 |
+| API unavailable                                    | Record availability and run static API fallback.                                     |
+| UI unavailable                                     | Emit skipped browser results with a reason and recommendation.                       |
+| Authentication absent                              | Run public checks and skip only protected expectations.                              |
+| OpenAPI invalid                                    | Warn and attempt best-effort route/schema fallback.                                  |
+| `package-lock.json` or npm audit unavailable       | Skip vulnerability lookup; never claim the project is clean.                         |
+| Playwright launch fails                            | Continue other checks and mark the scan incomplete.                                  |
+| AI disabled or credential absent                   | Skip only the AI check; the scan remains complete.                                   |
+| AI provider timeout/failure or invalid response    | Skip only the AI check, continue deterministic checks, and mark the scan incomplete. |
+| Individual check throws                            | Emit a redacted execution diagnostic and mark the overall scan incomplete.           |
+| Target root unreadable or report cannot be written | Treat as a fatal tool error.                                                         |
 
 The CLI returns a nonzero exit code only for fatal tool errors. Target findings, unavailable services, and isolated check failures remain report content.
 
@@ -221,7 +229,7 @@ Live paid-AI calls, live vulnerability databases, full browser matrices, and ext
 
 1. Build a vertical slice: CLI, minimal config, result model, one repository check, and Markdown report.
 2. Perform an early AI risk spike using one fixture, explicit OpenAI and Claude adapters, one selected-provider request, and one cited structured result.
-3. Implement configuration, redaction, inventory, stack detection, and generic repository checks.
+3. Implement configuration, redaction, inventory, stack detection, and generic repository checks. Configuration is complete; the remaining items are pending.
 4. Add secret detection and npm-only vulnerability analysis.
 5. Add service probes, shallow OpenAPI fallback, and safe API/security runtime checks.
 6. Add the Playwright lifecycle and required browser checks.
