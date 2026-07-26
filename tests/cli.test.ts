@@ -6,6 +6,18 @@ import { resolve } from "node:path";
 import { test } from "vitest";
 
 const CLI_PATH = resolve("dist/src/cli.js");
+const GOOD_README = `# CLI Fixture
+
+This fixture documents a small command-line project used to verify Sentinel report behavior without requiring a service.
+
+## Development Setup
+
+Install dependencies and run the repository quality checks before making changes.
+
+## Usage
+
+Run the fixture command and review the generated Sentinel report.
+`;
 
 async function withTemporaryDirectory(
   run: (directory: string) => Promise<void>,
@@ -59,11 +71,7 @@ test("CLI uses configured target and report paths", async () => {
       recursive: true,
     });
     await mkdir(targetDirectory);
-    await writeFile(
-      resolve(targetDirectory, "README.md"),
-      "# Configured target\n",
-      "utf8",
-    );
+    await writeFile(resolve(targetDirectory, "README.md"), GOOD_README, "utf8");
     await writeFile(
       configPath,
       JSON.stringify({
@@ -105,11 +113,7 @@ test("CLI writes a validated JSON report to the configured path", async () => {
     const reportPath = resolve(directory, "sentinel-report.json");
 
     await mkdir(targetDirectory);
-    await writeFile(
-      resolve(targetDirectory, "README.md"),
-      "# JSON target\n",
-      "utf8",
-    );
+    await writeFile(resolve(targetDirectory, "README.md"), GOOD_README, "utf8");
     await writeFile(
       configPath,
       JSON.stringify({
@@ -154,11 +158,7 @@ test("CLI renders a full terminal report without writing a file", async () => {
     const configPath = resolve(directory, "terminal.config.json");
 
     await mkdir(targetDirectory);
-    await writeFile(
-      resolve(targetDirectory, "README.md"),
-      "# Terminal target\n",
-      "utf8",
-    );
+    await writeFile(resolve(targetDirectory, "README.md"), GOOD_README, "utf8");
     await writeFile(
       configPath,
       JSON.stringify({

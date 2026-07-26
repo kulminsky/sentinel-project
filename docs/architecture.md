@@ -22,7 +22,7 @@ The design favors plain functions, fixed check registration, explicit boundaries
 The scan is coordinated by one visible pipeline:
 
 1. Load and validate configuration.
-2. Validate the target and build shared inventory when that milestone is available.
+2. Validate the target and build one bounded shared repository inventory.
 3. Probe each configured API and UI service once and cache the observations.
 4. Run the four fixed analysis-level groups concurrently.
 5. Run checks sequentially in registration order within each level.
@@ -57,11 +57,12 @@ Use a fixed list of plain check functions. External capabilities are passed only
 - TypeScript is strict, ESM, and compiled with `NodeNext` for Node.js 20.19 or later.
 - Vitest runs source tests, while ESLint and Prettier enforce static quality and formatting.
 - GitHub Actions runs the same aggregate `npm run check` command used locally.
+- One symlink-safe repository inventory supports generic, Node/npm, and TypeScript checks without retaining whole-repository contents.
 - The Playwright library is installed, but its configuration, browser binaries, and automation boundary remain deferred to the browser milestone.
 
 ## Setup and Concurrent Execution Flow
 
-Sentinel validates the readable target and prepares shared scan context before check execution. Project inventory and stack detection will join this preflight when implemented.
+Sentinel validates the readable target, builds the shared repository inventory, detects root Node/npm and TypeScript context, and prepares the shared scan context before check execution.
 
 Sentinel then probes only configured API and UI targets:
 
@@ -133,23 +134,48 @@ Rule customization, custom secret-pattern languages, and per-check plugin config
 
 API/UI base targets and timeouts currently drive central reachability probing. Endpoint expectations, authentication, pages, viewports, and form flows remain dormant until their runtime and Playwright milestones. The complete implemented contract is documented in `docs/configuration.md`.
 
+## Repository Analysis Boundary
+
+The implemented repository boundary walks the target once, records relative paths and file kinds, and never follows symlinks. It excludes VCS, dependency, generated, cache, and vendor trees. Traversal is bounded to depth 8, 20,000 entries, and five seconds; individual inspected text files are limited to 128 KiB.
+
+The fixed Code & Repository checks cover:
+
+- `.gitignore` coverage.
+- Recognized linter and formatter configuration.
+- Test files and the Node test script.
+- Common CI configuration.
+- Resolved root TypeScript strictness.
+- Root npm dependency freshness.
+- Root dependency lockfiles.
+- README quality.
+
+Generic repositories receive applicable filesystem checks. Root Node/npm and TypeScript evidence enables the deeper checks; pnpm, Yarn, Bun, and unknown stacks receive lockfile-presence behavior without deep adapters.
+
+Dependency freshness runs one read-only, non-scripted `npm outdated --json --long` process with a 10-second timeout and 64 KiB output limit. Missing npm, timeout, or registry failure produces a normal skipped note. Invalid successful structured output is isolated to the check and marks the report incomplete. This analysis is separate from the future npm vulnerability audit.
+
+An incomplete inventory never becomes a false absence warning. Positive evidence remains usable, while an affected absence-based check returns `Skipped / Info` and marks the report incomplete. Repository evidence contains only relative paths, recognized configuration names, and validated package/version metadata; raw file contents, command errors, registry configuration, and credentials are not rendered.
+
+Security, API contract/runtime, and UI browser coverage remain explicitly represented by `Skipped / Info` placeholder rows until their milestones are implemented. Existing API/UI availability and synthetic AI behavior remain active.
+
 ## Graceful Degradation
 
 Sentinel should produce the most complete report possible:
 
-| Condition                                                      | Behavior                                                                             |
-| -------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| No config or runtime URLs                                      | Scan the current directory statically; skip affected runtime checks.                 |
-| API unavailable                                                | Emit a normal availability note; run static API fallback when implemented.           |
-| UI unavailable                                                 | Emit a normal availability note and skip future browser checks.                      |
-| Authentication absent                                          | Run public checks and skip only protected expectations.                              |
-| OpenAPI invalid                                                | Warn and attempt best-effort route/schema fallback.                                  |
-| `package-lock.json` or npm audit unavailable                   | Skip vulnerability lookup; never claim the project is clean.                         |
-| Playwright launch fails                                        | Continue other checks and mark the scan incomplete.                                  |
-| AI disabled or credential absent                               | Skip only the AI check; the scan remains complete.                                   |
-| AI provider timeout/failure or invalid response                | Skip only the AI check, continue deterministic checks, and mark the scan incomplete. |
-| Individual check throws                                        | Emit a redacted execution diagnostic and mark the overall scan incomplete.           |
-| Target root unreadable or report cannot be rendered or written | Treat as a fatal tool error.                                                         |
+| Condition                                                      | Behavior                                                                               |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| No config or runtime URLs                                      | Scan the current directory statically; skip affected runtime checks.                   |
+| API unavailable                                                | Emit a normal availability note; run static API fallback when implemented.             |
+| UI unavailable                                                 | Emit a normal availability note and skip future browser checks.                        |
+| Authentication absent                                          | Run public checks and skip only protected expectations.                                |
+| OpenAPI invalid                                                | Warn and attempt best-effort route/schema fallback.                                    |
+| Repository inventory bounded or partially unreadable           | Preserve positive evidence; skip affected absence claims and mark the scan incomplete. |
+| npm freshness query unavailable                                | Skip freshness analysis without failing or marking the scan incomplete.                |
+| `package-lock.json` or npm audit unavailable                   | Skip vulnerability lookup; never claim the project is clean.                           |
+| Playwright launch fails                                        | Continue other checks and mark the scan incomplete.                                    |
+| AI disabled or credential absent                               | Skip only the AI check; the scan remains complete.                                     |
+| AI provider timeout/failure or invalid response                | Skip only the AI check, continue deterministic checks, and mark the scan incomplete.   |
+| Individual check throws                                        | Emit a redacted execution diagnostic and mark the overall scan incomplete.             |
+| Target root unreadable or report cannot be rendered or written | Treat as a fatal tool error.                                                           |
 
 The CLI returns a nonzero exit code only for fatal tool errors. Target findings, unavailable services, and isolated check failures remain report content.
 
@@ -212,26 +238,27 @@ Required unit tests focus on:
 - Environment-reference resolution and redaction.
 - Result invariants and summary counts.
 - Markdown, JSON, and terminal renderer consistency.
-- File exclusion and Node detection.
+- Bounded file exclusion, stack detection, and repository-check heuristics.
+- npm freshness output validation without live registry access.
 - Safe endpoint selection and shallow response expectations.
 - AI response and citation validation.
 
 Required integration tests cover:
 
-- Dormant generic and Node repository scans.
+- Generic and Node repository scans with no target services.
 - Unreachable API/UI degradation and static fallback.
 - Controlled HTTP observations.
 - Recorded npm audit output.
 - Disabled, valid, and invalid fake-AI responses.
 - Required report-field completeness.
 
-Live paid-AI calls, live vulnerability databases, full browser matrices, and external repositories are not part of the automated test suite. A complete automated CLI/Playwright smoke test is a stretch goal; the demo sample run remains mandatory.
+Live paid-AI calls, live npm registry queries, live vulnerability databases, full browser matrices, and external repositories are not part of the automated test suite. A complete automated CLI/Playwright smoke test is a stretch goal; the demo sample run remains mandatory.
 
 ## Implementation Order
 
 1. Build a vertical slice: CLI, minimal config, validated result/summary model, one repository check, and selectable report renderers.
 2. Perform an early AI risk spike using one fixture, explicit OpenAI and Claude adapters, one selected-provider request, and one cited structured result.
-3. Implement configuration, the isolated concurrent runner, redaction, inventory, stack detection, and generic repository checks. Configuration and the runner are complete; the remaining items are pending.
+3. Implement configuration, the isolated concurrent runner, redaction, inventory, stack detection, and generic repository checks. Configuration, the runner, inventory, detection, and repository checks are complete; production redaction remains pending.
 4. Add secret detection and npm-only vulnerability analysis.
 5. Add service probes, shallow OpenAPI fallback, and safe API/security runtime checks. Central reachability probing is complete; fallback and runtime assertions are pending.
 6. Add the Playwright lifecycle and required browser checks.

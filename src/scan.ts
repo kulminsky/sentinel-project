@@ -12,6 +12,7 @@ import type { SentinelConfig } from "./config/schema.js";
 import type { FetchLike, ScanContext } from "./core/check.js";
 import { createScanReport, type ScanReport } from "./core/result.js";
 import { runChecks } from "./core/runner.js";
+import { inspectRepository } from "./repository/inspection.js";
 import { probeConfiguredServices } from "./runtime/reachability.js";
 
 export interface ScanOptions {
@@ -33,6 +34,7 @@ export async function scanProject(
 
   await access(resolvedRoot, constants.R_OK);
 
+  const repository = await inspectRepository(resolvedRoot);
   const fetchImplementation = options.fetch ?? fetch;
   const reachability = await probeConfiguredServices(
     config,
@@ -40,6 +42,7 @@ export async function scanProject(
   );
   const context: ScanContext = {
     config,
+    repository,
     ai: options.ai ?? disabledAiSetup(),
     resolveEnvironmentReference:
       options.resolveEnvironmentReference ?? (() => undefined),

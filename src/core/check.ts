@@ -3,6 +3,7 @@ import type {
   EnvironmentReferenceResolver,
 } from "../ai/config.js";
 import type { SentinelConfig } from "../config/schema.js";
+import type { RepositoryInspection } from "../repository/inspection.js";
 import type { AnalysisLevel, CheckPhase, CheckResult } from "./result.js";
 
 export type FetchLike = (
@@ -34,6 +35,7 @@ export interface ServiceReachabilityCache {
 
 export interface ScanContext {
   readonly config: SentinelConfig;
+  readonly repository: RepositoryInspection;
   readonly ai: AiCheckSetup;
   readonly resolveEnvironmentReference: EnvironmentReferenceResolver;
   readonly fetch: FetchLike;

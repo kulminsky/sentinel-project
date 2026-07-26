@@ -18,6 +18,18 @@ afterEach(() => {
 function createContext(): ScanContext {
   return {
     config: createSentinelConfigSchema(process.cwd()).parse({}),
+    repository: {
+      root: process.cwd(),
+      entries: [],
+      complete: true,
+      rootComplete: true,
+      issues: [],
+      nodeProject: false,
+      typescriptProject: false,
+      packageManifest: {
+        state: "absent",
+      },
+    },
     ai: disabledAiSetup(),
     resolveEnvironmentReference: () => undefined,
     fetch: () => Promise.reject(new Error("Unexpected fetch.")),
