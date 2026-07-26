@@ -1,13 +1,12 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import test from "node:test";
+import { test } from "vitest";
 
 import { resolveAiSetup } from "../src/ai/config.js";
 import type { FetchLike } from "../src/ai/provider.js";
 
-const unreachableFetch: FetchLike = async () => {
-  throw new Error("Tests must not call an external API.");
-};
+const unreachableFetch: FetchLike = () =>
+  Promise.reject(new Error("Tests must not call an external API."));
 
 test("AI remains disabled unless it is explicitly enabled", () => {
   const setup = resolveAiSetup(
@@ -21,6 +20,35 @@ test("AI remains disabled unless it is explicitly enabled", () => {
   assert.equal(setup.kind, "skipped");
   if (setup.kind === "skipped") {
     assert.equal(setup.diagnosticCode, "AI_DISABLED");
+  }
+});
+
+test("AI enablement normalization preserves exact opt-in behavior", () => {
+  const explicitFalse = resolveAiSetup(
+    {
+      SENTINEL_AI_ENABLED: "false",
+      SENTINEL_AI_PROVIDER: "openai",
+      OPENAI_API_KEY: randomUUID(),
+    },
+    unreachableFetch,
+  );
+  const unsupportedCasing = resolveAiSetup(
+    {
+      SENTINEL_AI_ENABLED: "TRUE",
+      SENTINEL_AI_PROVIDER: "openai",
+      OPENAI_API_KEY: randomUUID(),
+    },
+    unreachableFetch,
+  );
+
+  assert.equal(explicitFalse.kind, "skipped");
+  assert.equal(unsupportedCasing.kind, "skipped");
+  if (
+    explicitFalse.kind === "skipped" &&
+    unsupportedCasing.kind === "skipped"
+  ) {
+    assert.equal(explicitFalse.diagnosticCode, "AI_DISABLED");
+    assert.equal(unsupportedCasing.diagnosticCode, "AI_DISABLED");
   }
 });
 

@@ -33,7 +33,7 @@ function readOpenAiOutcome(body: unknown): AiProviderOutcome {
     };
   }
 
-  const choice = choices[0];
+  const choice: unknown = choices[0];
   if (typeof choice !== "object" || choice === null || Array.isArray(choice)) {
     return {
       ok: false,

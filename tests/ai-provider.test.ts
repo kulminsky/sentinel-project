@@ -1,13 +1,10 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import test from "node:test";
+import { test } from "vitest";
 
 import { createClaudeProvider } from "../src/ai/claude.js";
 import { createOpenAiProvider } from "../src/ai/openai.js";
-import type {
-  AiStructuredRequest,
-  FetchLike,
-} from "../src/ai/provider.js";
+import type { AiStructuredRequest, FetchLike } from "../src/ai/provider.js";
 
 const REQUEST: AiStructuredRequest = {
   systemPrompt: "Return a finding.",
@@ -21,9 +18,7 @@ const REQUEST: AiStructuredRequest = {
   maxResponseBytes: 64 * 1024,
 };
 
-function recordingFetch(
-  responseBody: Readonly<Record<string, unknown>>,
-): {
+function recordingFetch(responseBody: Readonly<Record<string, unknown>>): {
   fetchImplementation: FetchLike;
   calls: Array<{ input: string | URL | Request; init?: RequestInit }>;
 } {
@@ -34,19 +29,37 @@ function recordingFetch(
 
   return {
     calls,
-    fetchImplementation: async (input, init) => {
+    fetchImplementation: (input, init) => {
       calls.push({
         input,
         ...(init === undefined ? {} : { init }),
       });
-      return new Response(JSON.stringify(responseBody), {
-        status: 200,
-        headers: {
-          "content-type": "application/json",
-        },
-      });
+      return Promise.resolve(
+        new Response(JSON.stringify(responseBody), {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+          },
+        }),
+      );
     },
   };
+}
+
+function requestUrl(input: string | URL | Request): string {
+  if (typeof input === "string") {
+    return input;
+  }
+
+  return input instanceof URL ? input.href : input.url;
+}
+
+function requestBody(init: RequestInit | undefined): string {
+  if (typeof init?.body !== "string") {
+    throw new TypeError("Expected a string request body.");
+  }
+
+  return init.body;
 }
 
 test("OpenAI adapter sends one bounded structured-output request", async () => {
@@ -56,7 +69,7 @@ test("OpenAI adapter sends one bounded structured-output request", async () => {
       {
         finish_reason: "stop",
         message: {
-          content: "{\"severity\":\"High\"}",
+          content: '{"severity":"High"}',
         },
       },
     ],
@@ -76,10 +89,13 @@ test("OpenAI adapter sends one bounded structured-output request", async () => {
   assert.equal(recording.calls.length, 1);
   const call = recording.calls[0];
   assert.ok(call);
-  assert.equal(String(call.input), "https://api.openai.com/v1/chat/completions");
+  assert.equal(
+    requestUrl(call.input),
+    "https://api.openai.com/v1/chat/completions",
+  );
   const headers = new Headers(call.init?.headers);
   assert.equal(headers.get("authorization"), `Bearer ${credential}`);
-  const bodyText = String(call.init?.body);
+  const bodyText = requestBody(call.init);
   const body = JSON.parse(bodyText) as Record<string, unknown>;
   assert.equal(body.model, "gpt-5.6-luna");
   assert.equal(body.max_completion_tokens, 512);
@@ -101,7 +117,7 @@ test("Claude adapter sends one bounded structured-output request", async () => {
     content: [
       {
         type: "text",
-        text: "{\"severity\":\"High\"}",
+        text: '{"severity":"High"}',
       },
     ],
     usage: {
@@ -120,19 +136,21 @@ test("Claude adapter sends one bounded structured-output request", async () => {
   assert.equal(recording.calls.length, 1);
   const call = recording.calls[0];
   assert.ok(call);
-  assert.equal(String(call.input), "https://api.anthropic.com/v1/messages");
+  assert.equal(requestUrl(call.input), "https://api.anthropic.com/v1/messages");
   const headers = new Headers(call.init?.headers);
   assert.equal(headers.get("x-api-key"), credential);
   assert.equal(headers.get("anthropic-version"), "2023-06-01");
-  const bodyText = String(call.init?.body);
+  const bodyText = requestBody(call.init);
   const body = JSON.parse(bodyText) as Record<string, unknown>;
   assert.equal(body.model, "claude-haiku-4-5");
   assert.equal(body.max_tokens, 512);
   assert.equal(bodyText.includes(credential), false);
   assert.equal(
     (
-      ((body.output_config as Record<string, unknown>)
-        .format as Record<string, unknown>)
+      (body.output_config as Record<string, unknown>).format as Record<
+        string,
+        unknown
+      >
     ).type,
     "json_schema",
   );
@@ -178,10 +196,12 @@ test("provider adapters classify refusal and output truncation", async () => {
 });
 
 test("provider adapters isolate HTTP and malformed envelope failures", async () => {
-  const failedFetch: FetchLike = async () =>
-    new Response("", {
-      status: 429,
-    });
+  const failedFetch: FetchLike = () =>
+    Promise.resolve(
+      new Response("", {
+        status: 429,
+      }),
+    );
   const malformed = recordingFetch({
     unexpected: true,
   });

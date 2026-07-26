@@ -8,11 +8,12 @@ Deliver a polished, reviewable MVP that demonstrates deliberate quality-engineer
 
 ## Current Status
 
-**Foundation and AI feasibility milestones complete.**
+**Foundation, AI feasibility, and tooling scaffold milestones complete.**
 
 Sentinel currently:
 
 - Compiles to a runnable Node.js CLI.
+- Uses Commander for CLI behavior and Zod for the implemented AI environment boundary.
 - Scans the current working directory.
 - Checks whether a recognized README exists at the repository root.
 - Runs or gracefully skips one synthetic semantic API test-gap check.
@@ -21,34 +22,42 @@ Sentinel currently:
 - Produces a structured Markdown report with summary, status, severity, finding, and recommendation fields.
 - Returns a nonzero exit code only when the scan cannot run or the report cannot be written.
 
-General configuration, stack detection, broader repository/security checks, runtime checks, Playwright, and production repository evidence selection are not implemented yet.
+General configuration, stack detection, broader repository/security checks, runtime checks, Playwright browser automation, and production repository evidence selection are not implemented yet. The Playwright library is installed for the planned browser milestone, but browser binaries are intentionally not installed.
 
 ## Development Setup
 
 Prerequisites:
 
-- Node.js 20 or later.
+- Node.js 20.19 or later.
 - npm.
 
-Install dependencies and build the project:
+From a clean clone, install dependencies:
 
 ```sh
 npm install
-npm run build
 ```
 
-Run the current scan against the repository in the current working directory:
+Then run the current scan against the repository in the current working directory:
 
 ```sh
 npm start
 ```
 
-The command writes `sentinel-report.md` in the current working directory.
+`npm start` builds the project automatically and writes `sentinel-report.md` in the current working directory. No environment configuration is required for this default, AI-disabled path.
 
-Run the implemented validation checks:
+Playwright browser downloads are deliberately separate from package installation. This milestone does not include a Playwright configuration, browser installation command, or browser automation.
+
+Available development commands:
 
 ```sh
-npm test
+npm run build        # Compile strict TypeScript
+npm test             # Build and run Vitest once
+npm run test:watch   # Build, then watch source tests
+npm run lint         # Run ESLint
+npm run lint:fix     # Apply safe ESLint fixes
+npm run format       # Format tracked project files
+npm run format:check # Verify formatting
+npm run check        # Run formatting, linting, build, and tests
 ```
 
 ## Synthetic AI Feasibility Check
@@ -88,7 +97,7 @@ These documents are the source of truth until an approved decision is deliberate
 - Preserve static-first execution and graceful degradation.
 - Keep runtime checks read-only and never start target services.
 - Use Playwright for all browser automation.
-- Redact secrets before logging, reporting, persistence, or AI transmission.
+- Redact repository and target secrets before logging, reporting, persistence, or AI evidence transmission; use provider credentials only as authentication headers.
 - Keep the project compiling and run relevant tests after each change.
 - Complete required deliverables before beginning stretch work.
 
@@ -127,6 +136,9 @@ The repository currently contains the foundation implementation and its document
 
 ```text
 .
+├── .github/
+│   └── workflows/
+│       └── ci.yml
 ├── src/
 │   ├── ai/
 │   │   ├── check.ts
@@ -149,13 +161,17 @@ The repository currently contains the foundation implementation and its document
 │   ├── ai-check.test.ts
 │   ├── ai-config.test.ts
 │   ├── ai-provider.test.ts
+│   ├── cli.test.ts
 │   ├── result.test.ts
 │   └── scan-report.test.ts
+├── .prettierignore
+├── .prettierrc.json
 ├── AGENTS.md
 ├── README.md
 ├── docs/
 │   ├── architecture.md
 │   └── decisions.md
+├── eslint.config.mjs
 ├── .gitignore
 ├── package-lock.json
 ├── package.json
@@ -172,7 +188,7 @@ For each milestone:
 2. Implement the smallest complete vertical change.
 3. Keep the project compiling throughout the change.
 4. Add tests only for behavior introduced by that milestone.
-5. Run the smallest relevant test set, then the broader milestone checks.
+5. Run the smallest relevant test set, then `npm run check`.
 6. Update documentation only where implemented behavior or an approved decision changed.
 7. Capture genuine development-process evidence.
 8. Summarize changed files, tests run, and remaining limitations before stopping.
@@ -180,6 +196,7 @@ For each milestone:
 ## Roadmap
 
 - **Foundation — complete:** executable project skeleton, common result model, one repository check, and Markdown reporting.
+- **Tooling — complete:** reproducible npm setup, CLI/config libraries, Vitest, linting, formatting, and CI checks; Playwright browser installation remains deferred.
 - **Static analysis:** configuration, repository inventory, Node detection, repository checks, and security checks.
 - **Runtime analysis:** service detection, API fallback/runtime checks, and Playwright checks.
 - **AI analysis:** synthetic multi-provider feasibility is complete; production evidence selection and redaction remain planned.
@@ -189,14 +206,14 @@ For each milestone:
 
 This README should grow with implemented behavior rather than describe planned functionality as complete:
 
-| Milestone | README sections to complete or update |
-|---|---|
-| Foundation | Completed: Current Status, Development Setup, Project Structure, and the first verified command now reflect the implementation. |
-| Configuration and static analysis | Update Current Status and MVP Scope; add configuration and supported-check documentation based on implemented behavior. |
-| API runtime and fallback | Update MVP Scope and Project Structure; document verified runtime prerequisites and degradation behavior. |
-| Playwright | Update MVP Scope; document supported browser checks and any verified limitations. |
-| AI feasibility spike | Completed: Current Status, Development Setup, Project Structure, provider behavior, synthetic data handling, limits, and fallback now reflect the implementation. |
-| Production AI integration | Replace synthetic-only guidance with verified evidence selection, redaction, configuration, and sample-report behavior. |
-| Submission readiness | Replace planning-oriented status text; add verified usage, sample-report, testing, known-gap, and process-evidence sections. |
+| Milestone                         | README sections to complete or update                                                                                                                             |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Foundation                        | Completed: Current Status, Development Setup, Project Structure, and the first verified command now reflect the implementation.                                   |
+| Configuration and static analysis | Update Current Status and MVP Scope; add configuration and supported-check documentation based on implemented behavior.                                           |
+| API runtime and fallback          | Update MVP Scope and Project Structure; document verified runtime prerequisites and degradation behavior.                                                         |
+| Playwright                        | Update MVP Scope; document supported browser checks and any verified limitations.                                                                                 |
+| AI feasibility spike              | Completed: Current Status, Development Setup, Project Structure, provider behavior, synthetic data handling, limits, and fallback now reflect the implementation. |
+| Production AI integration         | Replace synthetic-only guidance with verified evidence selection, redaction, configuration, and sample-report behavior.                                           |
+| Submission readiness              | Replace planning-oriented status text; add verified usage, sample-report, testing, known-gap, and process-evidence sections.                                      |
 
 Planned items should be removed or marked complete only after their implementation and tests are verified.

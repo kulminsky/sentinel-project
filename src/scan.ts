@@ -3,12 +3,13 @@ import { access, stat } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 
 import { runSyntheticAiCheck } from "./ai/check.js";
-import {
-  disabledAiSetup,
-  type AiCheckSetup,
-} from "./ai/config.js";
+import { disabledAiSetup, type AiCheckSetup } from "./ai/config.js";
 import { checkRepositoryReadme } from "./checks/repository-readme.js";
-import { createCheckResult, type CheckResult, type ScanReport } from "./core/result.js";
+import {
+  createCheckResult,
+  type CheckResult,
+  type ScanReport,
+} from "./core/result.js";
 
 export interface ScanOptions {
   ai?: AiCheckSetup;

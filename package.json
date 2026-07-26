@@ -9,15 +9,35 @@
   },
   "scripts": {
     "build": "tsc --project tsconfig.json",
+    "prestart": "npm run build",
     "start": "node dist/src/cli.js",
-    "test": "npm run build && node --test dist/tests/*.test.js",
-    "check": "npm test"
+    "pretest": "npm run build",
+    "test": "vitest run --dir tests",
+    "pretest:watch": "npm run build",
+    "test:watch": "vitest --dir tests",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "npm run format:check && npm run lint && npm test"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20.19.0"
+  },
+  "dependencies": {
+    "commander": "^14.0.3",
+    "playwright": "^1.62.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@types/node": "^26.1.1",
-    "typescript": "^7.0.2"
+    "@eslint/js": "^9.39.5",
+    "@types/node": "^20.19.43",
+    "eslint": "^9.39.5",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.8.0",
+    "prettier": "^3.9.6",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.65.0",
+    "vitest": "^4.1.10"
   }
 }

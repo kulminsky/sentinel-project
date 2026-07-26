@@ -2,6 +2,8 @@
 
 import { resolve } from "node:path";
 
+import { Command } from "commander";
+
 import { resolveAiSetup } from "./ai/config.js";
 import { writeMarkdownReport } from "./report/markdown.js";
 import { scanProject } from "./scan.js";
@@ -19,7 +21,14 @@ async function main(): Promise<void> {
   console.log(`Sentinel report written to ${outputPath}`);
 }
 
-main().catch((error: unknown) => {
+const program = new Command()
+  .name("sentinel")
+  .description("Scan a local project and produce a quality report.")
+  .showHelpAfterError()
+  .allowExcessArguments(false)
+  .action(main);
+
+program.parseAsync().catch((error: unknown) => {
   const message = error instanceof Error ? error.message : "Unknown error";
   console.error(`Sentinel failed: ${message}`);
   process.exitCode = 1;

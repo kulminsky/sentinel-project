@@ -6,7 +6,13 @@ export const ANALYSIS_LEVELS = [
 ] as const;
 
 export const STATUSES = ["Pass", "Warn", "Fail", "Skipped"] as const;
-export const SEVERITIES = ["Critical", "High", "Medium", "Low", "Info"] as const;
+export const SEVERITIES = [
+  "Critical",
+  "High",
+  "Medium",
+  "Low",
+  "Info",
+] as const;
 
 export type AnalysisLevel = (typeof ANALYSIS_LEVELS)[number];
 export type CheckStatus = (typeof STATUSES)[number];

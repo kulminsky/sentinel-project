@@ -2,7 +2,7 @@
 
 These instructions apply to the entire repository.
 
-- Treat `docs/architecture.md` and `docs/decisions.md` as the approved source of truth.
+- Treat `docs/architecture.md` and `docs/decisions.md` as the approved MVP target. Use `README.md` and the codebase to determine what is currently implemented; never assume a planned capability already exists.
 - Keep each change limited to the current requested milestone and stop when that milestone is complete.
 - Prefer KISS, plain functions, fixed check registration, and small explicit boundaries.
 - Avoid speculative abstractions, class hierarchies, plugin systems, dependency-injection containers, and unrequested flexibility.
@@ -11,9 +11,10 @@ These instructions apply to the entire repository.
 - Preserve static-first execution and graceful degradation. Missing services or optional credentials must not crash a scan.
 - Keep all browser automation in Playwright.
 - Keep runtime API checks read-only and never start target services.
-- Never log, report, persist, or send secrets without redaction.
+- Never include repository or target secrets in prompts, request bodies, response evidence, reports, logs, or persisted evidence without redaction.
+- Provider credentials may be sent only as authentication headers to the explicitly selected provider. Never place real credential values in prompts, request bodies, response evidence, reports, logs, tests, or documentation.
 - Distinguish internal execution errors from normal skipped checks and preserve the approved exit-code behavior.
-- Run the smallest relevant test set after each change; run broader tests before milestone completion.
+- Run the smallest relevant test set after each change; run `npm run check` before milestone completion.
 - At handoff, summarize changed files, tests run, documentation review, and remaining limitations.
 - Do not begin the next milestone or add stretch work unless explicitly requested.
 

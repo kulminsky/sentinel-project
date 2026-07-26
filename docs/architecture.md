@@ -4,6 +4,8 @@
 
 Sentinel is a TypeScript CLI that scans a local project and produces an actionable quality report. The MVP is designed for a 2-3 business-day implementation window and prioritizes a polished, reviewable result over broad but shallow coverage.
 
+This document describes the approved MVP target architecture. `README.md` and the codebase define the currently implemented state; a planned capability is not implemented until they show it as available.
+
 Sentinel provides:
 
 - Generic static repository and security checks for any readable local project.
@@ -32,23 +34,32 @@ Checks run sequentially for predictable behavior, logs, cleanup, and evidence. N
 
 ## Module Boundaries
 
-| Boundary | Responsibility |
-|---|---|
-| CLI | Parse operational options, invoke the scan, and return the final exit code. It contains no check logic. |
-| Configuration | Load JSON, `.env`, and process environment values; apply precedence; validate; normalize; and register secrets for redaction. |
-| Scan coordinator | Execute phases, evaluate prerequisites, isolate failures, and collect results for all four analysis levels. |
-| Project inventory | Walk the target once and retain categorized paths and metadata, not whole-repository contents. |
-| Bounded file reader | Apply shared exclusions and size limits when checks read file content. |
-| Repository checks | Inspect source/config inventory, manifests, lockfiles, `.gitignore`, CI, linting, and test presence. |
-| Security checks | Perform secret detection, npm vulnerability analysis, security-header checks, and evidence-derived debug checks. |
-| Service probe and HTTP boundary | Determine reachability and perform bounded, read-only HTTP requests. It returns observations rather than policy decisions. |
-| API checks | Interpret API observations and shallow OpenAPI or route evidence. |
-| Playwright boundary | Own Chromium lifecycle, contexts, authentication state, timeouts, axe integration, and browser observations. |
-| AI boundary | Select and redact bounded evidence, make one provider request, and validate cited structured output. |
-| Result model | Enforce status, severity, evidence, redaction, and diagnostic invariants. |
-| Report module | Sort results, calculate counts, describe incomplete execution, and render Markdown. |
+| Boundary                        | Responsibility                                                                                                                |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| CLI                             | Parse operational options, invoke the scan, and return the final exit code. It contains no check logic.                       |
+| Configuration                   | Load JSON, `.env`, and process environment values; apply precedence; validate; normalize; and register secrets for redaction. |
+| Scan coordinator                | Execute phases, evaluate prerequisites, isolate failures, and collect results for all four analysis levels.                   |
+| Project inventory               | Walk the target once and retain categorized paths and metadata, not whole-repository contents.                                |
+| Bounded file reader             | Apply shared exclusions and size limits when checks read file content.                                                        |
+| Repository checks               | Inspect source/config inventory, manifests, lockfiles, `.gitignore`, CI, linting, and test presence.                          |
+| Security checks                 | Perform secret detection, npm vulnerability analysis, security-header checks, and evidence-derived debug checks.              |
+| Service probe and HTTP boundary | Determine reachability and perform bounded, read-only HTTP requests. It returns observations rather than policy decisions.    |
+| API checks                      | Interpret API observations and shallow OpenAPI or route evidence.                                                             |
+| Playwright boundary             | Own Chromium lifecycle, contexts, authentication state, timeouts, axe integration, and browser observations.                  |
+| AI boundary                     | Select and redact bounded evidence, make one provider request, and validate cited structured output.                          |
+| Result model                    | Enforce status, severity, evidence, redaction, and diagnostic invariants.                                                     |
+| Report module                   | Sort results, calculate counts, describe incomplete execution, and render Markdown.                                           |
 
 Use a fixed list of plain check functions. External capabilities are passed only to modules that need them; there is no dependency-injection container, dynamic plugin registry, or class hierarchy.
+
+## Implemented Tooling Baseline
+
+- The CLI uses Commander while keeping check logic outside the command boundary.
+- Zod validates and normalizes the currently implemented AI environment values; the broader configuration milestone remains pending.
+- TypeScript is strict, ESM, and compiled with `NodeNext` for Node.js 20.19 or later.
+- Vitest runs source tests, while ESLint and Prettier enforce static quality and formatting.
+- GitHub Actions runs the same aggregate `npm run check` command used locally.
+- The Playwright library is installed, but its configuration, browser binaries, and automation boundary remain deferred to the browser milestone.
 
 ## Static-First Execution Flow
 
@@ -119,19 +130,19 @@ Rule customization, custom secret-pattern languages, and per-check plugin config
 
 Sentinel should produce the most complete report possible:
 
-| Condition | Behavior |
-|---|---|
-| No config or runtime URLs | Scan the current directory statically; skip affected runtime checks. |
-| API unavailable | Record availability and run static API fallback. |
-| UI unavailable | Emit skipped browser results with a reason and recommendation. |
-| Authentication absent | Run public checks and skip only protected expectations. |
-| OpenAPI invalid | Warn and attempt best-effort route/schema fallback. |
-| `package-lock.json` or npm audit unavailable | Skip vulnerability lookup; never claim the project is clean. |
-| Playwright launch fails | Continue other checks and mark the scan incomplete. |
-| AI disabled, provider unselected, or credential absent | Skip only the AI check; the scan remains complete. |
-| AI provider timeout/failure or invalid response | Skip only the AI check, continue deterministic checks, and mark the scan incomplete. |
-| Individual check throws | Emit a redacted execution diagnostic and mark the overall scan incomplete. |
-| Target root unreadable or report cannot be written | Treat as a fatal tool error. |
+| Condition                                              | Behavior                                                                             |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------ |
+| No config or runtime URLs                              | Scan the current directory statically; skip affected runtime checks.                 |
+| API unavailable                                        | Record availability and run static API fallback.                                     |
+| UI unavailable                                         | Emit skipped browser results with a reason and recommendation.                       |
+| Authentication absent                                  | Run public checks and skip only protected expectations.                              |
+| OpenAPI invalid                                        | Warn and attempt best-effort route/schema fallback.                                  |
+| `package-lock.json` or npm audit unavailable           | Skip vulnerability lookup; never claim the project is clean.                         |
+| Playwright launch fails                                | Continue other checks and mark the scan incomplete.                                  |
+| AI disabled, provider unselected, or credential absent | Skip only the AI check; the scan remains complete.                                   |
+| AI provider timeout/failure or invalid response        | Skip only the AI check, continue deterministic checks, and mark the scan incomplete. |
+| Individual check throws                                | Emit a redacted execution diagnostic and mark the overall scan incomplete.           |
+| Target root unreadable or report cannot be written     | Treat as a fatal tool error.                                                         |
 
 The CLI returns a nonzero exit code only for fatal tool errors. Target findings, unavailable services, and isolated check failures remain report content.
 
@@ -172,15 +183,19 @@ The MVP uses:
 - At most one bounded request to the selected provider per scan.
 - A strict structured response.
 - Exact citations limited to evidence supplied in the request.
-- Secret redaction and input-size limits before transmission.
+- Repository and target-secret redaction, plus input-size limits, before evidence transmission.
 - Deterministic validation and mapping into Sentinel results.
 - No multi-turn workflow, provider registry, or elaborate retry system.
+
+The selected provider credential may be sent only as an authentication header to that provider. Real credential values must never enter prompts, request bodies, response evidence, reports, logs, tests, or documentation.
 
 The overall report summary remains deterministic. When paid credentials are absent, all deterministic checks run and the AI check is `Skipped / Info`. The committed sample report must demonstrate a real AI-enabled run.
 
 The current feasibility spike is intentionally synthetic: it sends only a fixed, secret-free contract-and-test fixture through the selected provider. It uses process environment variables for enablement, explicit provider selection, and provider-specific credentials. Real repository evidence selection and redaction remain part of the later production AI milestone.
 
 ## Testing Strategy
+
+Automated tests use Vitest. `npm run check` is the milestone-completion gate and runs formatting verification, linting, compilation, and the test suite.
 
 Required unit tests focus on:
 

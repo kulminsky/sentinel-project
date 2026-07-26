@@ -81,10 +81,7 @@ export async function postJson(
     }
 
     const declaredLength = Number(response.headers.get("content-length"));
-    if (
-      Number.isFinite(declaredLength) &&
-      declaredLength > maxResponseBytes
-    ) {
+    if (Number.isFinite(declaredLength) && declaredLength > maxResponseBytes) {
       await response.body?.cancel();
       return {
         ok: false,
@@ -124,9 +121,7 @@ export async function postJson(
 }
 
 export function readTokenCount(value: unknown): number | undefined {
-  return typeof value === "number" &&
-    Number.isSafeInteger(value) &&
-    value >= 0
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
     ? value
     : undefined;
 }

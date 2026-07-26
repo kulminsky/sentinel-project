@@ -12,8 +12,7 @@ export interface FakeAiProvider {
 
 export function createFakeAiProvider(
   outcome:
-    | AiProviderOutcome
-    | ((request: AiStructuredRequest) => AiProviderOutcome),
+    AiProviderOutcome | ((request: AiStructuredRequest) => AiProviderOutcome),
   name: AiProviderName = "openai",
 ): FakeAiProvider {
   const requests: AiStructuredRequest[] = [];
@@ -22,9 +21,11 @@ export function createFakeAiProvider(
     requests,
     provider: {
       name,
-      async analyze(request) {
+      analyze(request) {
         requests.push(request);
-        return typeof outcome === "function" ? outcome(request) : outcome;
+        return Promise.resolve(
+          typeof outcome === "function" ? outcome(request) : outcome,
+        );
       },
     },
   };

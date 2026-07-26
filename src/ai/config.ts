@@ -1,6 +1,18 @@
+import { z } from "zod";
+
 import { createClaudeProvider } from "./claude.js";
 import { createOpenAiProvider } from "./openai.js";
 import type { AiProvider, FetchLike } from "./provider.js";
+
+const aiEnvironmentSchema = z.object({
+  SENTINEL_AI_ENABLED: z
+    .string()
+    .optional()
+    .transform((value) => value === "true"),
+  SENTINEL_AI_PROVIDER: z.string().optional(),
+  OPENAI_API_KEY: z.string().optional(),
+  ANTHROPIC_API_KEY: z.string().optional(),
+});
 
 export type AiPrerequisiteCode =
   | "AI_DISABLED"
@@ -34,24 +46,25 @@ export function resolveAiSetup(
   environment: NodeJS.ProcessEnv,
   fetchImplementation: FetchLike = fetch,
 ): AiCheckSetup {
-  if (environment.SENTINEL_AI_ENABLED !== "true") {
+  const config = aiEnvironmentSchema.parse(environment);
+
+  if (!config.SENTINEL_AI_ENABLED) {
     return disabledAiSetup();
   }
 
-  const providerName = environment.SENTINEL_AI_PROVIDER;
+  const providerName = config.SENTINEL_AI_PROVIDER;
   if (!providerName) {
     return {
       kind: "skipped",
       diagnosticCode: "AI_PROVIDER_NOT_SELECTED",
       finding: "AI analysis is enabled, but no provider was selected.",
-      recommendation:
-        "Set SENTINEL_AI_PROVIDER to either openai or claude.",
+      recommendation: "Set SENTINEL_AI_PROVIDER to either openai or claude.",
     };
   }
 
   switch (providerName) {
     case "openai": {
-      const credential = environment.OPENAI_API_KEY;
+      const credential = config.OPENAI_API_KEY;
       if (!credential) {
         return {
           kind: "skipped",
@@ -69,7 +82,7 @@ export function resolveAiSetup(
       };
     }
     case "claude": {
-      const credential = environment.ANTHROPIC_API_KEY;
+      const credential = config.ANTHROPIC_API_KEY;
       if (!credential) {
         return {
           kind: "skipped",
@@ -90,9 +103,9 @@ export function resolveAiSetup(
       return {
         kind: "skipped",
         diagnosticCode: "AI_PROVIDER_UNSUPPORTED",
-        finding: "AI analysis is enabled, but the selected provider is unsupported.",
-        recommendation:
-          "Set SENTINEL_AI_PROVIDER to either openai or claude.",
+        finding:
+          "AI analysis is enabled, but the selected provider is unsupported.",
+        recommendation: "Set SENTINEL_AI_PROVIDER to either openai or claude.",
       };
   }
 }

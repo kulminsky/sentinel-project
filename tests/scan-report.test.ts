@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import test from "node:test";
+import { test } from "vitest";
 
 import { resolveAiSetup } from "../src/ai/config.js";
 import type { AiProviderOutcome } from "../src/ai/provider.js";
@@ -116,37 +116,39 @@ test("provider credentials never appear in normalized or rendered output", async
         SENTINEL_AI_PROVIDER: "openai",
         OPENAI_API_KEY: credential,
       },
-      async () =>
-        new Response(
-          JSON.stringify({
-            choices: [
-              {
-                finish_reason: "stop",
-                message: {
-                  content: JSON.stringify({
-                    severity: "High",
-                    finding:
-                      "The tests omit the authenticated cross-account export rejection.",
-                    recommendation: "Add the missing authorization test.",
-                    citations: [
-                      "synthetic/api/account-export-contract.md",
-                      "synthetic/tests/account-export.test.md",
-                    ],
-                  }),
+      () =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              choices: [
+                {
+                  finish_reason: "stop",
+                  message: {
+                    content: JSON.stringify({
+                      severity: "High",
+                      finding:
+                        "The tests omit the authenticated cross-account export rejection.",
+                      recommendation: "Add the missing authorization test.",
+                      citations: [
+                        "synthetic/api/account-export-contract.md",
+                        "synthetic/tests/account-export.test.md",
+                      ],
+                    }),
+                  },
                 },
+              ],
+              usage: {
+                prompt_tokens: 100,
+                completion_tokens: 30,
               },
-            ],
-            usage: {
-              prompt_tokens: 100,
-              completion_tokens: 30,
+            }),
+            {
+              status: 200,
+              headers: {
+                "content-type": "application/json",
+              },
             },
-          }),
-          {
-            status: 200,
-            headers: {
-              "content-type": "application/json",
-            },
-          },
+          ),
         ),
     );
 
@@ -176,9 +178,6 @@ test("an AI execution failure leaves repository results intact and marks the sca
     assert.equal(report.incomplete, true);
     assert.equal(report.results[0]?.status, "Pass");
     assert.equal(report.results[1]?.status, "Skipped");
-    assert.equal(
-      report.results[1]?.diagnosticCode,
-      "AI_PROVIDER_ERROR",
-    );
+    assert.equal(report.results[1]?.diagnosticCode, "AI_PROVIDER_ERROR");
   });
 });

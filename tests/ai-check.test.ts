@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "vitest";
 
 import { runSyntheticAiCheck } from "../src/ai/check.js";
 import { disabledAiSetup } from "../src/ai/config.js";
@@ -10,9 +10,7 @@ import { createFakeAiProvider } from "./support/fake-ai-provider.js";
 const CONTRACT_PATH = "synthetic/api/account-export-contract.md";
 const TEST_PATH = "synthetic/tests/account-export.test.md";
 
-function validProviderOutcome(
-  severity = "High",
-): AiProviderOutcome {
+function validProviderOutcome(severity = "High"): AiProviderOutcome {
   return {
     ok: true,
     response: {
@@ -201,13 +199,16 @@ test("unexpected provider exceptions are isolated without exposing their message
     kind: "ready",
     provider: {
       name: "openai",
-      async analyze() {
-        throw new Error(sensitiveMessage);
+      analyze() {
+        return Promise.reject(new Error(sensitiveMessage));
       },
     },
   });
 
   assert.equal(execution.incomplete, true);
   assert.equal(execution.result.diagnosticCode, "AI_PROVIDER_ERROR");
-  assert.equal(JSON.stringify(execution.result).includes(sensitiveMessage), false);
+  assert.equal(
+    JSON.stringify(execution.result).includes(sensitiveMessage),
+    false,
+  );
 });
