@@ -128,7 +128,8 @@ Sentinel should produce the most complete report possible:
 | OpenAPI invalid | Warn and attempt best-effort route/schema fallback. |
 | `package-lock.json` or npm audit unavailable | Skip vulnerability lookup; never claim the project is clean. |
 | Playwright launch fails | Continue other checks and mark the scan incomplete. |
-| AI disabled, credential absent, timeout, or invalid response | Skip only the AI check and continue deterministic checks. |
+| AI disabled, provider unselected, or credential absent | Skip only the AI check; the scan remains complete. |
+| AI provider timeout/failure or invalid response | Skip only the AI check, continue deterministic checks, and mark the scan incomplete. |
 | Individual check throws | Emit a redacted execution diagnostic and mark the overall scan incomplete. |
 | Target root unreadable or report cannot be written | Treat as a fatal tool error. |
 
@@ -166,8 +167,9 @@ The required AI check performs semantic test-gap analysis by comparing a bounded
 
 The MVP uses:
 
-- One OpenAI-compatible provider boundary.
-- One bounded request per scan.
+- One small provider boundary with explicit OpenAI and Claude adapters.
+- Mandatory provider selection when AI is enabled; Sentinel never infers a provider from available credentials.
+- At most one bounded request to the selected provider per scan.
 - A strict structured response.
 - Exact citations limited to evidence supplied in the request.
 - Secret redaction and input-size limits before transmission.
@@ -175,6 +177,8 @@ The MVP uses:
 - No multi-turn workflow, provider registry, or elaborate retry system.
 
 The overall report summary remains deterministic. When paid credentials are absent, all deterministic checks run and the AI check is `Skipped / Info`. The committed sample report must demonstrate a real AI-enabled run.
+
+The current feasibility spike is intentionally synthetic: it sends only a fixed, secret-free contract-and-test fixture through the selected provider. It uses process environment variables for enablement, explicit provider selection, and provider-specific credentials. Real repository evidence selection and redaction remain part of the later production AI milestone.
 
 ## Testing Strategy
 
@@ -201,7 +205,7 @@ Live paid-AI calls, live vulnerability databases, full browser matrices, and ext
 ## Implementation Order
 
 1. Build a vertical slice: CLI, minimal config, result model, one repository check, and Markdown report.
-2. Perform an early AI risk spike using one fixture, one real request, and one cited structured result.
+2. Perform an early AI risk spike using one fixture, explicit OpenAI and Claude adapters, one selected-provider request, and one cited structured result.
 3. Implement configuration, redaction, inventory, stack detection, and generic repository checks.
 4. Add secret detection and npm-only vulnerability analysis.
 5. Add service probes, shallow OpenAPI fallback, and safe API/security runtime checks.
@@ -222,7 +226,7 @@ Capture genuine Cursor evidence throughout these milestones rather than reconstr
 - Automatic form discovery or application-specific login automation.
 - Git-history secret scanning or full SAST/data-flow analysis.
 - Visual regression or multi-browser/device matrices.
-- Multiple AI providers, multi-turn agents, or a provider plugin system.
+- AI providers beyond OpenAI and Claude, multi-turn agents, provider comparison, or a provider plugin system.
 - Dynamic check plugins, dependency-injection frameworks, event buses, or job schedulers.
 - Additional report formats before the Markdown MVP is complete.
 - Automated fixes or target-source modification.

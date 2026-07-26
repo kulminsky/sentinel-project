@@ -8,17 +8,20 @@ Deliver a polished, reviewable MVP that demonstrates deliberate quality-engineer
 
 ## Current Status
 
-**Foundation milestone complete.**
+**Foundation and AI feasibility milestones complete.**
 
 Sentinel currently:
 
 - Compiles to a runnable Node.js CLI.
 - Scans the current working directory.
 - Checks whether a recognized README exists at the repository root.
+- Runs or gracefully skips one synthetic semantic API test-gap check.
+- Supports explicit OpenAI or Claude selection for that synthetic check.
+- Validates structured AI findings and rejects unsupported evidence citations.
 - Produces a structured Markdown report with summary, status, severity, finding, and recommendation fields.
 - Returns a nonzero exit code only when the scan cannot run or the report cannot be written.
 
-Configuration, stack detection, broader repository/security checks, runtime checks, Playwright, and AI are not implemented yet.
+General configuration, stack detection, broader repository/security checks, runtime checks, Playwright, and production repository evidence selection are not implemented yet.
 
 ## Development Setup
 
@@ -47,6 +50,26 @@ Run the implemented validation checks:
 ```sh
 npm test
 ```
+
+## Synthetic AI Feasibility Check
+
+AI is disabled by default and uses only a committed, secret-free synthetic contract-and-test fixture. Sentinel does not scan or send repository source code in this milestone.
+
+To exercise one provider manually, first place its credential in the process environment using your normal secure shell workflow. Sentinel reads `OPENAI_API_KEY` for OpenAI and `ANTHROPIC_API_KEY` for Claude; never place credential values in repository files or commands.
+
+Run exactly one selected provider:
+
+```sh
+SENTINEL_AI_ENABLED=true SENTINEL_AI_PROVIDER=openai npm start
+```
+
+```sh
+SENTINEL_AI_ENABLED=true SENTINEL_AI_PROVIDER=claude npm start
+```
+
+When AI is enabled, `SENTINEL_AI_PROVIDER` is required. Missing selection or credentials produces a normal `Skipped / Info` result. Provider or invalid-response failures affect only the AI check, mark the report incomplete, and do not produce a nonzero exit code.
+
+The spike uses fixed models (`gpt-5.6-luna` and `claude-haiku-4-5`), one request, an 8 KiB evidence limit, a 512-token output limit, and a 20-second timeout. A request against the synthetic fixture is expected to cost well under USD $0.01 at current list prices; Sentinel does not embed provider pricing.
 
 ## Architecture Documents
 
@@ -79,7 +102,7 @@ The approved MVP is scoped to:
 - Static-first execution with conditional API and browser checks.
 - Shallow OpenAPI analysis and read-only runtime API requests.
 - Playwright-based Chromium checks for explicitly configured pages and flows.
-- One bounded LLM-based semantic test-gap analysis.
+- One selected-provider, bounded LLM-based semantic test-gap analysis using OpenAI or Claude.
 - Graceful behavior when services, configuration, tools, or optional AI credentials are unavailable.
 - Focused automated tests, a reproducible demo target, a sample report, and genuine development-process evidence.
 
@@ -88,7 +111,7 @@ This list describes the approved implementation target, not functionality curren
 ## Planned Milestones
 
 1. **Complete:** Establish the CLI-to-report vertical slice.
-2. Validate the bounded AI approach with an early risk spike.
+2. **Complete:** Validate the bounded multi-provider AI approach with an early synthetic risk spike.
 3. Add configuration, redaction, project inventory, stack detection, and generic repository checks.
 4. Add secret detection and npm-only vulnerability analysis.
 5. Add service probing, shallow API fallback, and safe API/security runtime checks.
@@ -105,6 +128,13 @@ The repository currently contains the foundation implementation and its document
 ```text
 .
 ├── src/
+│   ├── ai/
+│   │   ├── check.ts
+│   │   ├── claude.ts
+│   │   ├── config.ts
+│   │   ├── fixture.ts
+│   │   ├── openai.ts
+│   │   └── provider.ts
 │   ├── checks/
 │   │   └── repository-readme.ts
 │   ├── core/
@@ -114,6 +144,11 @@ The repository currently contains the foundation implementation and its document
 │   ├── cli.ts
 │   └── scan.ts
 ├── tests/
+│   ├── support/
+│   │   └── fake-ai-provider.ts
+│   ├── ai-check.test.ts
+│   ├── ai-config.test.ts
+│   ├── ai-provider.test.ts
 │   ├── result.test.ts
 │   └── scan-report.test.ts
 ├── AGENTS.md
@@ -147,7 +182,7 @@ For each milestone:
 - **Foundation — complete:** executable project skeleton, common result model, one repository check, and Markdown reporting.
 - **Static analysis:** configuration, repository inventory, Node detection, repository checks, and security checks.
 - **Runtime analysis:** service detection, API fallback/runtime checks, and Playwright checks.
-- **AI analysis:** bounded semantic test-gap analysis with safe fallback behavior.
+- **AI analysis:** synthetic multi-provider feasibility is complete; production evidence selection and redaction remain planned.
 - **Submission readiness:** tests, demo target, sample report, documentation, and process evidence.
 
 ## README Maintenance by Milestone
@@ -160,7 +195,8 @@ This README should grow with implemented behavior rather than describe planned f
 | Configuration and static analysis | Update Current Status and MVP Scope; add configuration and supported-check documentation based on implemented behavior. |
 | API runtime and fallback | Update MVP Scope and Project Structure; document verified runtime prerequisites and degradation behavior. |
 | Playwright | Update MVP Scope; document supported browser checks and any verified limitations. |
-| AI integration | Update MVP Scope; document the implemented AI rationale, provider behavior, data handling, costs, and fallback. |
+| AI feasibility spike | Completed: Current Status, Development Setup, Project Structure, provider behavior, synthetic data handling, limits, and fallback now reflect the implementation. |
+| Production AI integration | Replace synthetic-only guidance with verified evidence selection, redaction, configuration, and sample-report behavior. |
 | Submission readiness | Replace planning-oriented status text; add verified usage, sample-report, testing, known-gap, and process-evidence sections. |
 
 Planned items should be removed or marked complete only after their implementation and tests are verified.

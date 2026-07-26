@@ -2,10 +2,22 @@ import { constants } from "node:fs";
 import { access, stat } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 
+import { runSyntheticAiCheck } from "./ai/check.js";
+import {
+  disabledAiSetup,
+  type AiCheckSetup,
+} from "./ai/config.js";
 import { checkRepositoryReadme } from "./checks/repository-readme.js";
 import { createCheckResult, type CheckResult, type ScanReport } from "./core/result.js";
 
-export async function scanProject(targetRoot: string): Promise<ScanReport> {
+export interface ScanOptions {
+  ai?: AiCheckSetup;
+}
+
+export async function scanProject(
+  targetRoot: string,
+  options: ScanOptions = {},
+): Promise<ScanReport> {
   const resolvedRoot = resolve(targetRoot);
   const targetStat = await stat(resolvedRoot);
 
@@ -16,13 +28,13 @@ export async function scanProject(targetRoot: string): Promise<ScanReport> {
   await access(resolvedRoot, constants.R_OK);
 
   let incomplete = false;
-  let results: readonly CheckResult[];
+  const results: CheckResult[] = [];
 
   try {
-    results = await checkRepositoryReadme(resolvedRoot);
+    results.push(...(await checkRepositoryReadme(resolvedRoot)));
   } catch {
     incomplete = true;
-    results = [
+    results.push(
       createCheckResult({
         checkId: "repository.readme",
         title: "Repository README",
@@ -35,8 +47,14 @@ export async function scanProject(targetRoot: string): Promise<ScanReport> {
           "Review the Sentinel execution diagnostic and retry the scan.",
         diagnosticCode: "CHECK_EXECUTION_ERROR",
       }),
-    ];
+    );
   }
+
+  const aiExecution = await runSyntheticAiCheck(
+    options.ai ?? disabledAiSetup(),
+  );
+  results.push(aiExecution.result);
+  incomplete ||= aiExecution.incomplete;
 
   return {
     targetName: basename(resolvedRoot) || resolvedRoot,

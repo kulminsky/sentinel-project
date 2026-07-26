@@ -2,6 +2,7 @@
 
 import { resolve } from "node:path";
 
+import { resolveAiSetup } from "./ai/config.js";
 import { writeMarkdownReport } from "./report/markdown.js";
 import { scanProject } from "./scan.js";
 
@@ -10,7 +11,9 @@ const DEFAULT_REPORT_NAME = "sentinel-report.md";
 async function main(): Promise<void> {
   const targetRoot = process.cwd();
   const outputPath = resolve(targetRoot, DEFAULT_REPORT_NAME);
-  const report = await scanProject(targetRoot);
+  const report = await scanProject(targetRoot, {
+    ai: resolveAiSetup(process.env),
+  });
 
   await writeMarkdownReport(report, outputPath);
   console.log(`Sentinel report written to ${outputPath}`);

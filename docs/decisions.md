@@ -21,8 +21,9 @@ This file records the implementation decisions approved before development. `doc
 | Browser automation | Use Playwright with Chromium for all browser checks. | No alternate browser automation framework or full cross-browser matrix. |
 | Form checks | Run only explicitly configured, bounded form flows. | Never discover and submit arbitrary forms. |
 | AI use case | Perform semantic API test-gap analysis. | Compare bounded route/contract evidence with relevant tests; do not use AI merely to summarize the report. |
-| AI request model | Use one bounded request through one OpenAI-compatible boundary. | No multi-turn workflow, provider registry, or complex retry logic. |
+| AI request model | Use one bounded request through one shared boundary with explicit OpenAI and Claude adapters. Require the provider to be selected when AI is enabled. | A scan calls only the selected provider; there is no default-provider inference, multi-turn workflow, provider registry, or complex retry logic. |
 | AI fallback | Disable the AI check gracefully when credentials are absent or the provider fails. | Deterministic checks continue and AI reports `Skipped / Info`; the sample report still demonstrates a real AI run. |
+| AI feasibility safety | Prove the provider flow with a fixed, secret-free synthetic contract-and-test fixture before selecting production evidence. | The spike does not read or transmit repository source, environment contents, or detected secrets. |
 | Secret handling | Redact before storage, logging, reporting, or AI transmission. | Credentials and detected secret values must never appear in output or provider payloads. |
 | Check results | Use one normalized result per stable check-and-subject pair. | Results use only the required status/severity enums and aggregate directly into the report. |
 | Execution errors | Distinguish internal check errors from normal prerequisite skips. | Isolated errors remain nonfatal but produce diagnostic codes and a prominent incomplete-scan summary. |
