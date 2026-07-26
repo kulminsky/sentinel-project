@@ -354,10 +354,12 @@ export async function runSyntheticAiCheck(
       subject: "Synthetic account-export fixture",
       finding: validation.finding.finding,
       recommendation: validation.finding.recommendation,
-      evidence: buildExecutionEvidence(
-        outcome.response,
-        validation.finding.citations,
-      ),
+      evidence: [
+        ...buildExecutionEvidence(
+          outcome.response,
+          validation.finding.citations,
+        ),
+      ],
       durationMs,
     }),
     incomplete: false,

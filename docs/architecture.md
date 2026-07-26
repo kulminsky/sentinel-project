@@ -13,7 +13,7 @@ Sentinel provides:
 - Safe API and browser checks when configured services are reachable.
 - Static API fallback when services are unavailable.
 - One bounded LLM-based semantic test-gap check.
-- A Markdown report containing all required statuses, severities, findings, recommendations, and summary counts.
+- One selected Markdown, JSON, or plain-text terminal report containing all required statuses, severities, findings, recommendations, and summary data.
 
 The design favors plain functions, fixed check registration, explicit boundaries, and bounded concurrency at the analysis-level boundary. Sentinel is not a plugin platform or a hosted service.
 
@@ -26,7 +26,7 @@ The scan is coordinated by one visible pipeline:
 3. Probe each configured API and UI service once and cache the observations.
 4. Run the four fixed analysis-level groups concurrently.
 5. Run checks sequentially in registration order within each level.
-6. Normalize results, build the summary, and write Markdown.
+6. Normalize results, build one summary, and render the configured report format.
 
 Every check owns an explicit timeout and error boundary. Completion timing never controls report order, and no scheduler or general concurrency framework is used.
 
@@ -45,8 +45,8 @@ Every check owns an explicit timeout and error boundary. Completion timing never
 | API checks                      | Interpret API observations and shallow OpenAPI or route evidence.                                                                                              |
 | Playwright boundary             | Own Chromium lifecycle, contexts, authentication state, timeouts, axe integration, and browser observations.                                                   |
 | AI boundary                     | Select and redact bounded evidence, make one provider request, and validate cited structured output.                                                           |
-| Result model                    | Enforce status, severity, evidence, redaction, and diagnostic invariants.                                                                                      |
-| Report module                   | Sort results, calculate counts, describe incomplete execution, and render Markdown.                                                                            |
+| Result model                    | Runtime-validate every result and construct one deterministic Overall Summary.                                                                                 |
+| Report module                   | Validate the normalized report and render one selected Markdown, JSON, or plain-text terminal representation.                                                  |
 
 Use a fixed list of plain check functions. External capabilities are passed only to modules that need them; there is no dependency-injection container, dynamic plugin registry, or class hierarchy.
 
@@ -96,13 +96,14 @@ Each result represents one stable check-and-subject pair and contains:
 
 Result rules:
 
+- Status, finding, severity, and recommendation are non-optional and runtime-validated for every result.
 - No issue produces one `Pass / Info` result.
-- A missing prerequisite produces one `Skipped / Info` result with an enablement recommendation.
+- A missing prerequisite produces one `Skipped / Info` result with a substantive finding and enablement recommendation.
 - Independently actionable subjects produce separate warning or failure results.
 - A check does not emit a generic pass alongside issue results.
 - Internal execution errors are not normal skips: they use a diagnostic code and make the report summary state that the scan was incomplete.
 - All evidence and diagnostics are redacted before being stored or rendered.
-- Summary counts are based on normalized results; the MVP does not add a second coverage-counting system.
+- One normalized Overall Summary stores the scan status, total, every status/severity count including zeroes, and the deterministic complete/incomplete narrative. Renderers never recalculate it.
 
 ## Configuration
 
@@ -120,9 +121,9 @@ Configuration precedence is:
 1. Existing process environment.
 2. `.env`.
 3. `sentinel.config.json`.
-4. The two clean-run target and report defaults.
+4. The clean-run target and Markdown report defaults.
 
-The only defaults are the invocation directory for `target.root` and `sentinel-report.md` for `report.path`. API and UI sections are optional, but every value inside a supplied section is required according to the schema. Unknown keys and invalid, incomplete, unreadable, or malformed configuration are fatal path-specific errors; the loader never drops a bad section or falls back after validation fails.
+The clean run defaults to the invocation directory for `target.root`, `markdown` for `report.format`, and `sentinel-report.md` for `report.path`. JSON requires an explicit path; terminal output forbids a path and writes only to stdout. API and UI sections are optional, but every value inside a supplied section is required according to the schema. Unknown keys and invalid, incomplete, unreadable, or malformed configuration are fatal path-specific errors; the loader never drops a bad section or falls back after validation fails.
 
 Credentials are resolved through environment-variable references and must never be written to reports or logs. Target URLs, ports, paths, credentials, endpoint parameters, and authentication values must not be hardcoded in production source.
 
@@ -130,25 +131,25 @@ The future redaction milestone will register only explicitly referenced values a
 
 Rule customization, custom secret-pattern languages, and per-check plugin configuration are outside the MVP.
 
-API and UI configuration is currently validated but remains dormant until the runtime and Playwright milestones. The complete implemented contract is documented in `docs/configuration.md`.
+API/UI base targets and timeouts currently drive central reachability probing. Endpoint expectations, authentication, pages, viewports, and form flows remain dormant until their runtime and Playwright milestones. The complete implemented contract is documented in `docs/configuration.md`.
 
 ## Graceful Degradation
 
 Sentinel should produce the most complete report possible:
 
-| Condition                                          | Behavior                                                                             |
-| -------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| No config or runtime URLs                          | Scan the current directory statically; skip affected runtime checks.                 |
-| API unavailable                                    | Emit a normal availability note; run static API fallback when implemented.           |
-| UI unavailable                                     | Emit a normal availability note and skip future browser checks.                      |
-| Authentication absent                              | Run public checks and skip only protected expectations.                              |
-| OpenAPI invalid                                    | Warn and attempt best-effort route/schema fallback.                                  |
-| `package-lock.json` or npm audit unavailable       | Skip vulnerability lookup; never claim the project is clean.                         |
-| Playwright launch fails                            | Continue other checks and mark the scan incomplete.                                  |
-| AI disabled or credential absent                   | Skip only the AI check; the scan remains complete.                                   |
-| AI provider timeout/failure or invalid response    | Skip only the AI check, continue deterministic checks, and mark the scan incomplete. |
-| Individual check throws                            | Emit a redacted execution diagnostic and mark the overall scan incomplete.           |
-| Target root unreadable or report cannot be written | Treat as a fatal tool error.                                                         |
+| Condition                                                      | Behavior                                                                             |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| No config or runtime URLs                                      | Scan the current directory statically; skip affected runtime checks.                 |
+| API unavailable                                                | Emit a normal availability note; run static API fallback when implemented.           |
+| UI unavailable                                                 | Emit a normal availability note and skip future browser checks.                      |
+| Authentication absent                                          | Run public checks and skip only protected expectations.                              |
+| OpenAPI invalid                                                | Warn and attempt best-effort route/schema fallback.                                  |
+| `package-lock.json` or npm audit unavailable                   | Skip vulnerability lookup; never claim the project is clean.                         |
+| Playwright launch fails                                        | Continue other checks and mark the scan incomplete.                                  |
+| AI disabled or credential absent                               | Skip only the AI check; the scan remains complete.                                   |
+| AI provider timeout/failure or invalid response                | Skip only the AI check, continue deterministic checks, and mark the scan incomplete. |
+| Individual check throws                                        | Emit a redacted execution diagnostic and mark the overall scan incomplete.           |
+| Target root unreadable or report cannot be rendered or written | Treat as a fatal tool error.                                                         |
 
 The CLI returns a nonzero exit code only for fatal tool errors. Target findings, unavailable services, and isolated check failures remain report content.
 
@@ -210,6 +211,7 @@ Required unit tests focus on:
 - Central reachability caching and sanitized unavailable observations.
 - Environment-reference resolution and redaction.
 - Result invariants and summary counts.
+- Markdown, JSON, and terminal renderer consistency.
 - File exclusion and Node detection.
 - Safe endpoint selection and shallow response expectations.
 - AI response and citation validation.
@@ -227,7 +229,7 @@ Live paid-AI calls, live vulnerability databases, full browser matrices, and ext
 
 ## Implementation Order
 
-1. Build a vertical slice: CLI, minimal config, result model, one repository check, and Markdown report.
+1. Build a vertical slice: CLI, minimal config, validated result/summary model, one repository check, and selectable report renderers.
 2. Perform an early AI risk spike using one fixture, explicit OpenAI and Claude adapters, one selected-provider request, and one cited structured result.
 3. Implement configuration, the isolated concurrent runner, redaction, inventory, stack detection, and generic repository checks. Configuration and the runner are complete; the remaining items are pending.
 4. Add secret detection and npm-only vulnerability analysis.
@@ -251,5 +253,5 @@ Capture genuine Cursor evidence throughout these milestones rather than reconstr
 - Visual regression or multi-browser/device matrices.
 - AI providers beyond OpenAI and Claude, multi-turn agents, provider comparison, or a provider plugin system.
 - Dynamic check plugins, dependency-injection frameworks, event buses, or job schedulers.
-- Additional report formats before the Markdown MVP is complete.
+- Simultaneous multi-format output, ANSI styling, interactive terminal output, or report formats beyond Markdown, JSON, and plain text.
 - Automated fixes or target-source modification.

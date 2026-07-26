@@ -4,48 +4,39 @@ import {
   ANALYSIS_LEVELS,
   SEVERITIES,
   STATUSES,
-  type CheckResult,
+  parseScanReport,
   type ScanReport,
 } from "../core/result.js";
-
-function countResults(
-  results: readonly CheckResult[],
-  field: "status" | "severity",
-  value: string,
-): number {
-  return results.filter((result) => result[field] === value).length;
-}
 
 function inline(value: string): string {
   return value.replaceAll("\n", " ").trim();
 }
 
 export function renderMarkdownReport(report: ScanReport): string {
+  const validated = parseScanReport(report);
+  const summary = validated.overallSummary;
   const lines = [
     "# Sentinel Quality Report",
     "",
-    `- **Target:** ${inline(report.targetName)}`,
-    `- **Generated:** ${report.generatedAt}`,
+    `- **Target:** ${inline(validated.targetName)}`,
+    `- **Generated:** ${validated.generatedAt}`,
     "",
     "## Overall Summary",
     "",
-    `- **Scan status:** ${report.incomplete ? "Incomplete" : "Complete"}`,
-    `- **Results:** ${report.results.length}`,
+    `- **Scan status:** ${summary.scanStatus}`,
+    `- **Results:** ${summary.totalResults}`,
     `- **Status counts:** ${STATUSES.map(
-      (status) => `${status} ${countResults(report.results, "status", status)}`,
+      (status) => `${status} ${summary.statusCounts[status]}`,
     ).join(", ")}`,
     `- **Severity counts:** ${SEVERITIES.map(
-      (severity) =>
-        `${severity} ${countResults(report.results, "severity", severity)}`,
+      (severity) => `${severity} ${summary.severityCounts[severity]}`,
     ).join(", ")}`,
     "",
-    report.incomplete
-      ? "Sentinel completed the available checks, but one or more checks encountered an internal execution error."
-      : "Sentinel completed every check available in this scan.",
+    summary.narrative,
   ];
 
   for (const level of ANALYSIS_LEVELS) {
-    const levelResults = report.results.filter(
+    const levelResults = validated.results.filter(
       (result) => result.level === level,
     );
 

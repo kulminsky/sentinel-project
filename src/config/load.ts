@@ -11,6 +11,7 @@ const DEFAULT_ENV_FILE_NAME = ".env";
 
 const STRING_ENVIRONMENT_MAPPINGS = [
   ["SENTINEL_TARGET_ROOT", ["target", "root"]],
+  ["SENTINEL_REPORT_FORMAT", ["report", "format"]],
   ["SENTINEL_REPORT_PATH", ["report", "path"]],
   ["SENTINEL_API_BASE_URL", ["api", "baseUrl"]],
   ["SENTINEL_API_HEALTH_PATH", ["api", "healthPath"]],

@@ -217,7 +217,7 @@ test("unreachable services produce report notes without making the scan incomple
     });
 
     assert.equal(requestCount, 2);
-    assert.equal(report.incomplete, false);
+    assert.equal(report.overallSummary.scanStatus, "Complete");
     const apiResult = report.results.find(
       (result) => result.checkId === "api.service-availability",
     );

@@ -6,7 +6,7 @@ These instructions apply to the entire repository.
 - Keep each change limited to the current requested milestone and stop when that milestone is complete.
 - Prefer KISS, plain functions, fixed check registration, and small explicit boundaries.
 - Avoid speculative abstractions, class hierarchies, plugin systems, dependency-injection containers, and unrequested flexibility.
-- Do not expand supported stacks, report formats, providers, browsers, or runtime behavior without explicit approval.
+- Do not expand supported stacks, the approved Markdown/JSON/terminal report formats, providers, browsers, or runtime behavior without explicit approval.
 - Never hardcode target URLs, ports, filesystem paths, endpoint parameters, credentials, or authentication values.
 - Preserve centralized setup, cached reachability, concurrent analysis-level execution, and graceful degradation. Checks remain sequential within each level; missing services or optional credentials must not crash a scan.
 - Keep all browser automation in Playwright.
@@ -14,6 +14,7 @@ These instructions apply to the entire repository.
 - Never include repository or target secrets in prompts, request bodies, response evidence, reports, logs, or persisted evidence without redaction.
 - Provider credentials may be sent only as authentication headers to the explicitly selected provider. Never place real credential values in prompts, request bodies, response evidence, reports, logs, tests, or documentation.
 - Distinguish internal execution errors from normal skipped checks and preserve the approved exit-code behavior.
+- Preserve the runtime-validated report model. Every result, including a skipped result, must contain a nonempty status, finding, severity, and recommendation.
 - Run the smallest relevant test set after each change; run `npm run check` before milestone completion.
 - At handoff, summarize changed files, tests run, documentation review, and remaining limitations.
 - Do not begin the next milestone or add stretch work unless explicitly requested.

@@ -83,6 +83,7 @@ test("zero configuration uses only the clean-run target and report defaults", as
     });
 
     assert.equal(loaded.config.target.root, directory);
+    assert.equal(loaded.config.report.format, "markdown");
     assert.equal(
       loaded.config.report.path,
       join(directory, "sentinel-report.md"),
@@ -95,6 +96,91 @@ test("zero configuration uses only the clean-run target and report defaults", as
   });
 });
 
+test("report format environment mappings preserve precedence and strict path rules", async () => {
+  await withTemporaryDirectory(async (directory) => {
+    const jsonPath = join(directory, "report.json");
+    const jsonConfig = await loadSentinelConfig({
+      cwd: directory,
+      environment: {
+        SENTINEL_REPORT_FORMAT: "json",
+        SENTINEL_REPORT_PATH: "./report.json",
+      },
+    });
+    const terminalConfig = await loadSentinelConfig({
+      cwd: directory,
+      environment: {
+        SENTINEL_REPORT_FORMAT: "terminal",
+      },
+    });
+    const missingJsonPath = await captureConfigError(() =>
+      loadSentinelConfig({
+        cwd: directory,
+        environment: {
+          SENTINEL_REPORT_FORMAT: "json",
+        },
+      }),
+    );
+    const conflictingTerminalPath = await captureConfigError(() =>
+      loadSentinelConfig({
+        cwd: directory,
+        environment: {
+          SENTINEL_REPORT_FORMAT: "terminal",
+          SENTINEL_REPORT_PATH: "./unused.md",
+        },
+      }),
+    );
+    const unsupportedFormat = await captureConfigError(() =>
+      loadSentinelConfig({
+        cwd: directory,
+        environment: {
+          SENTINEL_REPORT_FORMAT: "xml",
+        },
+      }),
+    );
+    await writeFile(
+      join(directory, "sentinel.config.json"),
+      JSON.stringify({
+        report: {
+          path: "./lower-precedence.md",
+        },
+      }),
+      "utf8",
+    );
+    const lowerPrecedenceConflict = await captureConfigError(() =>
+      loadSentinelConfig({
+        cwd: directory,
+        environment: {
+          SENTINEL_REPORT_FORMAT: "terminal",
+        },
+      }),
+    );
+
+    assert.deepEqual(jsonConfig.config.report, {
+      format: "json",
+      path: jsonPath,
+    });
+    assert.deepEqual(terminalConfig.config.report, {
+      format: "terminal",
+    });
+    assert.ok(
+      missingJsonPath.issues.some((issue) => issue.path === "report.path"),
+    );
+    assert.ok(
+      conflictingTerminalPath.issues.some(
+        (issue) => issue.path === "report.path",
+      ),
+    );
+    assert.ok(
+      unsupportedFormat.issues.some((issue) => issue.path === "report.format"),
+    );
+    assert.ok(
+      lowerPrecedenceConflict.issues.some(
+        (issue) => issue.path === "report.path",
+      ),
+    );
+  });
+});
+
 test("process environment overrides .env, which overrides JSON", async () => {
   await withTemporaryDirectory(async (directory) => {
     await writeFile(
@@ -104,7 +190,8 @@ test("process environment overrides .env, which overrides JSON", async () => {
           root: "./json-target",
         },
         report: {
-          path: "./json-report.md",
+          format: "json",
+          path: "./json-report.json",
         },
         api: validApiConfig(),
         ai: {
@@ -118,6 +205,7 @@ test("process environment overrides .env, which overrides JSON", async () => {
       join(directory, ".env"),
       [
         "SENTINEL_TARGET_ROOT=./dotenv-target",
+        "SENTINEL_REPORT_FORMAT=markdown",
         "SENTINEL_REPORT_PATH=./dotenv-report.md",
         "SENTINEL_API_BASE_URL=https://api.dotenv.example.test",
         "SENTINEL_AI_ENABLED=true",
@@ -130,6 +218,8 @@ test("process environment overrides .env, which overrides JSON", async () => {
       cwd: directory,
       environment: {
         SENTINEL_TARGET_ROOT: "./process-target",
+        SENTINEL_REPORT_FORMAT: "json",
+        SENTINEL_REPORT_PATH: "./process-report.json",
         SENTINEL_API_BASE_URL: "https://api.process.example.test:9443",
         SENTINEL_AI_PROVIDER: "openai",
       },
@@ -138,8 +228,9 @@ test("process environment overrides .env, which overrides JSON", async () => {
     assert.equal(loaded.config.target.root, join(directory, "process-target"));
     assert.equal(
       loaded.config.report.path,
-      join(directory, "dotenv-report.md"),
+      join(directory, "process-report.json"),
     );
+    assert.equal(loaded.config.report.format, "json");
     assert.equal(
       loaded.config.api?.baseUrl,
       "https://api.process.example.test:9443",

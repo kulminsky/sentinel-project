@@ -211,10 +211,27 @@ test("exceptions and invalid outputs each degrade to one isolated row", async ()
       incomplete: false,
     }),
   );
+  const invalidResult = createTestCheck("invalid-result", "Security", () =>
+    Promise.resolve({
+      results: [
+        {
+          checkId: "invalid-result",
+          title: "Check invalid-result",
+          level: "Security",
+          phase: "static",
+          status: "Pass",
+          severity: "Info",
+          finding: "The result is malformed.",
+          recommendation: "",
+        },
+      ],
+      incomplete: false,
+    } as unknown as CheckExecution),
+  );
   const later = createTestCheck("later", "Security");
 
   const execution = await runChecks(
-    [thrown, empty, inconsistent, later],
+    [thrown, empty, inconsistent, invalidResult, later],
     createContext(),
   );
 
@@ -222,6 +239,7 @@ test("exceptions and invalid outputs each degrade to one isolated row", async ()
   assert.deepEqual(
     execution.results.map((result) => result.diagnosticCode),
     [
+      "CHECK_EXECUTION_ERROR",
       "CHECK_EXECUTION_ERROR",
       "CHECK_EXECUTION_ERROR",
       "CHECK_EXECUTION_ERROR",

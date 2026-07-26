@@ -7,9 +7,9 @@ Configuration precedence is:
 1. Existing process environment.
 2. `.env`.
 3. `sentinel.config.json`.
-4. The clean-run target and report defaults.
+4. The clean-run target and Markdown report defaults.
 
-The only defaults are the invocation directory as `target.root` and `sentinel-report.md` in that directory as `report.path`. These defaults remain anchored to the invocation directory when `--config` selects a file elsewhere. Missing API and UI sections are valid. Any supplied invalid, incomplete, or unknown value is a fatal configuration error with a property path.
+The clean run defaults to the invocation directory as `target.root`, `markdown` as `report.format`, and `sentinel-report.md` in the invocation directory as `report.path`. Missing API and UI sections are valid. Any supplied invalid, incomplete, conflicting, or unknown value is a fatal configuration error with a property path.
 
 ## JSON Shape
 
@@ -21,6 +21,7 @@ All objects are strict: unknown keys are rejected, including inside endpoints, a
     "root": "./demo-project"
   },
   "report": {
+    "format": "markdown",
     "path": "./sentinel-report.md"
   },
   "api": {
@@ -108,7 +109,8 @@ All objects are strict: unknown keys are rejected, including inside endpoints, a
 
 ## Validation Rules
 
-- Filesystem paths must be nonempty and cannot contain NUL bytes. Explicit relative target, report, and storage-state paths resolve from the selected configuration directory; omitted target and report values remain anchored to the invocation directory.
+- Filesystem paths must be nonempty and cannot contain NUL bytes. Explicit relative target, report, and storage-state paths resolve from the selected configuration directory; omitted clean-run target and Markdown report values remain anchored to the invocation directory.
+- Report format is `markdown`, `json`, or `terminal`. Markdown may omit its path and use the clean-run default, JSON requires an explicit path, and terminal forbids a path because it writes only to stdout.
 - API and UI base URLs must use HTTP or HTTPS. Explicit ports are allowed; embedded credentials and fragments are not.
 - API health paths, endpoint paths, UI page paths, form start paths, `goto` paths, and `assertUrl` paths must be same-origin paths beginning with exactly one `/`. Absolute URLs, backslashes, control characters, and fragments are rejected.
 - Timeouts, latency thresholds, and viewport dimensions must be positive integers. The API latency threshold cannot exceed its timeout.
@@ -118,6 +120,16 @@ All objects are strict: unknown keys are rejected, including inside endpoints, a
 - An endpoint, page, or form flow with `useAuthentication: true` requires the corresponding API or UI authentication block.
 
 API/UI base targets and timeouts currently drive one central, read-only reachability probe per configured service. Endpoint expectations, authentication, pages, viewports, and form flows are validated but remain dormant until their runtime and Playwright milestones.
+
+## Report Formats
+
+| Format     | Configuration                                     | Destination                                                      |
+| ---------- | ------------------------------------------------- | ---------------------------------------------------------------- |
+| `markdown` | `{ "format": "markdown", "path": "./report.md" }` | Writes the configured path; omit it to use `sentinel-report.md`. |
+| `json`     | `{ "format": "json", "path": "./report.json" }`   | Writes the required configured path.                             |
+| `terminal` | `{ "format": "terminal" }`                        | Writes the complete plain-text report to stdout.                 |
+
+Sentinel renders exactly one format per scan. A terminal report cannot include `path`, and JSON never derives or substitutes one.
 
 ## Authentication Shapes
 
@@ -148,6 +160,7 @@ Scalar variables:
 | Variable                            | Configuration path       |
 | ----------------------------------- | ------------------------ |
 | `SENTINEL_TARGET_ROOT`              | `target.root`            |
+| `SENTINEL_REPORT_FORMAT`            | `report.format`          |
 | `SENTINEL_REPORT_PATH`              | `report.path`            |
 | `SENTINEL_API_BASE_URL`             | `api.baseUrl`            |
 | `SENTINEL_API_HEALTH_PATH`          | `api.healthPath`         |
@@ -170,6 +183,8 @@ Structured variables contain JSON:
 | `SENTINEL_UI_FORM_FLOWS`      | `ui.formFlows`       |
 
 Booleans must be exactly `true` or `false`. Unknown `SENTINEL_*` variables are errors unless they are explicitly referenced by an authentication or form value. Unrelated project and system variables are ignored.
+
+Report format and path follow the same precedence as other values. A higher-precedence format does not silently discard a lower-precedence conflicting path; for example, terminal format combined with any supplied report path is a fatal `report.path` error.
 
 ## Credentials
 

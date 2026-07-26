@@ -117,6 +117,7 @@ test("full target configuration validates and normalizes filesystem paths", () =
     config.report.path,
     resolve(BASE_DIRECTORY, "reports/result.md"),
   );
+  assert.equal(config.report.format, "markdown");
   assert.equal(config.api?.baseUrl, "http://127.0.0.1:4321");
   assert.equal(config.ui?.authentication?.kind, "storageState");
   if (config.ui?.authentication?.kind === "storageState") {
@@ -125,6 +126,58 @@ test("full target configuration validates and normalizes filesystem paths", () =
       resolve(BASE_DIRECTORY, "auth/state.json"),
     );
   }
+});
+
+test("report formats enforce strict output path rules", () => {
+  const schema = createSentinelConfigSchema(BASE_DIRECTORY);
+  const markdown = schema.parse({
+    report: {},
+  });
+  const json = schema.parse({
+    report: {
+      format: "json",
+      path: "./reports/result.json",
+    },
+  });
+  const terminal = schema.parse({
+    report: {
+      format: "terminal",
+    },
+  });
+
+  assert.deepEqual(markdown.report, {
+    format: "markdown",
+    path: resolve(BASE_DIRECTORY, "sentinel-report.md"),
+  });
+  assert.deepEqual(json.report, {
+    format: "json",
+    path: resolve(BASE_DIRECTORY, "reports/result.json"),
+  });
+  assert.deepEqual(terminal.report, {
+    format: "terminal",
+  });
+  assert.ok(
+    issuePaths({
+      report: {
+        format: "json",
+      },
+    }).includes("report.path"),
+  );
+  assert.ok(
+    issuePaths({
+      report: {
+        format: "terminal",
+        path: "./unused.md",
+      },
+    }).includes("report.path"),
+  );
+  assert.ok(
+    issuePaths({
+      report: {
+        format: "xml",
+      },
+    }).includes("report.format"),
+  );
 });
 
 test("schema rejects unknown keys at every nesting level", () => {

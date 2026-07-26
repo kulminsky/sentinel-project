@@ -8,7 +8,7 @@ Deliver a polished, reviewable MVP that demonstrates deliberate quality-engineer
 
 ## Current Status
 
-**Foundation, AI feasibility, tooling, configuration, and concurrent-runner milestones complete.**
+**Foundation, AI feasibility, tooling, configuration, concurrent-runner, and validated-reporting milestones complete.**
 
 Sentinel currently:
 
@@ -22,8 +22,9 @@ Sentinel currently:
 - Runs or gracefully skips one synthetic semantic API test-gap check.
 - Supports explicit OpenAI or Claude selection for that synthetic check.
 - Validates structured AI findings and rejects unsupported evidence citations.
-- Produces a structured Markdown report with summary, status, severity, finding, and recommendation fields.
-- Returns a nonzero exit code only when configuration cannot be loaded, the scan cannot run, or the report cannot be written.
+- Produces one configured Markdown, JSON, or plain-text terminal report from a shared runtime-validated model.
+- Includes one normalized Overall Summary with complete status/severity counts and a deterministic narrative.
+- Returns a nonzero exit code only when configuration cannot be loaded, the scan cannot run, or the selected report cannot be rendered or written.
 
 Stack detection, broader repository/security checks, API assertions, static API fallback, Playwright browser automation, and production repository evidence selection are not implemented yet. API/UI endpoint, page, authentication, viewport, and form-flow settings remain dormant; only service targets and timeouts drive reachability probes. The Playwright library is installed for the planned browser milestone, but browser binaries are intentionally not installed.
 
@@ -77,6 +78,12 @@ Configuration is recursively strict. Invalid values, incomplete supplied section
 
 See [`docs/configuration.md`](docs/configuration.md) for the complete JSON contract, environment mappings, precedence, path resolution, and credential-reference rules. API/UI targets and timeouts support central reachability probing; their detailed runtime and browser settings are not executed yet.
 
+## Report Output
+
+Sentinel renders exactly one report per scan. Markdown is the default and retains the clean-run `sentinel-report.md` path. Select `json` with an explicit `report.path`, or select `terminal` without a path to write the full report to stdout. `SENTINEL_REPORT_FORMAT` and `SENTINEL_REPORT_PATH` provide the equivalent environment overrides.
+
+Every format contains the same validated Overall Summary and result data. Status, finding, severity, and recommendation are mandatory for every row, including skipped checks.
+
 ## Synthetic AI Feasibility Check
 
 AI is disabled by default and uses only a committed, secret-free synthetic contract-and-test fixture. Sentinel does not scan or send repository source code in this milestone.
@@ -123,7 +130,7 @@ These documents are the source of truth until an approved decision is deliberate
 
 The approved MVP is scoped to:
 
-- A TypeScript CLI with a Markdown report.
+- A TypeScript CLI with one selected Markdown, JSON, or plain-text terminal report.
 - Generic static repository and security analysis for readable local projects.
 - Deeper Node.js/npm analysis when a Node project is detected.
 - Centralized setup and reachability probing followed by concurrent analysis-level execution and conditional API/browser checks.
@@ -177,7 +184,9 @@ The repository currently contains the foundation implementation and its document
 │   │   ├── result.ts
 │   │   └── runner.ts
 │   ├── report/
-│   │   └── markdown.ts
+│   │   ├── json.ts
+│   │   ├── markdown.ts
+│   │   └── terminal.ts
 │   ├── runtime/
 │   │   └── reachability.ts
 │   ├── cli.ts
@@ -192,6 +201,7 @@ The repository currently contains the foundation implementation and its document
 │   ├── config-load.test.ts
 │   ├── config-schema.test.ts
 │   ├── reachability.test.ts
+│   ├── report-renderers.test.ts
 │   ├── result.test.ts
 │   ├── runner.test.ts
 │   └── scan-report.test.ts
@@ -227,7 +237,7 @@ For each milestone:
 
 ## Roadmap
 
-- **Foundation — complete:** executable project skeleton, common result model, one repository check, and Markdown reporting.
+- **Foundation — complete:** executable project skeleton, runtime-validated result/summary model, one repository check, and selectable Markdown/JSON/terminal reporting.
 - **Tooling — complete:** reproducible npm setup, CLI/config libraries, Vitest, linting, formatting, and CI checks; Playwright browser installation remains deferred.
 - **Configuration — complete:** strict JSON and environment loading, normalized target/report paths, source precedence, and fatal path-specific validation.
 - **Core runner — complete:** four concurrent analysis-level groups, sequential per-level checks, per-check timeouts, isolated failures, and deterministic ordering.
@@ -243,6 +253,7 @@ This README should grow with implemented behavior rather than describe planned f
 | Milestone                        | README sections to complete or update                                                                                                                             |
 | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Foundation                       | Completed: Current Status, Development Setup, Project Structure, and the first verified command now reflect the implementation.                                   |
+| Validated reporting              | Completed: Current Status, Configuration, report behavior, model invariants, and Project Structure reflect all three implemented formats.                         |
 | Repository and security analysis | Update Current Status and MVP Scope; add supported-check documentation based on implemented behavior.                                                             |
 | API runtime and fallback         | Update MVP Scope and Project Structure; document verified runtime prerequisites and degradation behavior.                                                         |
 | Playwright                       | Update MVP Scope; document supported browser checks and any verified limitations.                                                                                 |

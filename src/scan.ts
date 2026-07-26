@@ -10,7 +10,7 @@ import {
 import { CHECKS } from "./checks/registry.js";
 import type { SentinelConfig } from "./config/schema.js";
 import type { FetchLike, ScanContext } from "./core/check.js";
-import type { ScanReport } from "./core/result.js";
+import { createScanReport, type ScanReport } from "./core/result.js";
 import { runChecks } from "./core/runner.js";
 import { probeConfiguredServices } from "./runtime/reachability.js";
 
@@ -48,10 +48,10 @@ export async function scanProject(
   };
   const execution = await runChecks(CHECKS, context);
 
-  return {
+  return createScanReport({
     targetName: basename(resolvedRoot) || resolvedRoot,
     generatedAt: new Date().toISOString(),
     incomplete: execution.incomplete,
     results: execution.results,
-  };
+  });
 }

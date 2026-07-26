@@ -4,6 +4,7 @@ import { test } from "vitest";
 import { runSyntheticAiCheck } from "../src/ai/check.js";
 import { disabledAiSetup } from "../src/ai/config.js";
 import type { AiProviderOutcome } from "../src/ai/provider.js";
+import { createScanReport } from "../src/core/result.js";
 import { renderMarkdownReport } from "../src/report/markdown.js";
 import { createFakeAiProvider } from "./support/fake-ai-provider.js";
 
@@ -60,12 +61,14 @@ test("a valid AI finding maps to the normalized result and Markdown report", asy
     "Token usage: input 120, output 35",
   ]);
 
-  const markdown = renderMarkdownReport({
-    targetName: "synthetic",
-    generatedAt: "2026-01-01T00:00:00.000Z",
-    incomplete: execution.incomplete,
-    results: [execution.result],
-  });
+  const markdown = renderMarkdownReport(
+    createScanReport({
+      targetName: "synthetic",
+      generatedAt: "2026-01-01T00:00:00.000Z",
+      incomplete: execution.incomplete,
+      results: [execution.result],
+    }),
+  );
   assert.match(markdown, /## API \/ Backend/);
   assert.match(markdown, /\*\*Phase:\*\* AI/);
   assert.match(markdown, /authenticated cross-account/);

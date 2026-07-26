@@ -1,11 +1,8 @@
 import {
   ANALYSIS_LEVELS,
-  SEVERITIES,
-  STATUSES,
   createCheckResult,
+  parseCheckResult,
   type CheckResult,
-  type CheckStatus,
-  type Severity,
 } from "./result.js";
 import type { Check, CheckExecution, ScanContext } from "./check.js";
 
@@ -26,87 +23,25 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function isCheckStatus(value: unknown): value is CheckStatus {
-  return (
-    typeof value === "string" &&
-    STATUSES.some((allowedStatus) => value === allowedStatus)
-  );
-}
-
-function isSeverity(value: unknown): value is Severity {
-  return (
-    typeof value === "string" &&
-    SEVERITIES.some((allowedSeverity) => value === allowedSeverity)
-  );
-}
-
 function normalizeResult(
   check: Check,
   candidate: unknown,
   durationMs: number,
 ): CheckResult {
-  if (!isRecord(candidate)) {
-    throw new Error("Invalid check result.");
-  }
-
-  const {
-    checkId,
-    title,
-    level,
-    phase,
-    status,
-    severity,
-    finding,
-    recommendation,
-    subject,
-    evidence,
-    durationMs: reportedDuration,
-    diagnosticCode,
-  } = candidate;
+  const result = parseCheckResult(candidate);
 
   if (
-    checkId !== check.id ||
-    title !== check.title ||
-    level !== check.level ||
-    phase !== check.phase
+    result.checkId !== check.id ||
+    result.title !== check.title ||
+    result.level !== check.level ||
+    result.phase !== check.phase
   ) {
     throw new Error("Check result metadata does not match its check.");
   }
 
-  if (
-    !isCheckStatus(status) ||
-    !isSeverity(severity) ||
-    typeof finding !== "string" ||
-    typeof recommendation !== "string" ||
-    (subject !== undefined && typeof subject !== "string") ||
-    (evidence !== undefined &&
-      (!Array.isArray(evidence) ||
-        !evidence.every((item: unknown) => typeof item === "string"))) ||
-    (reportedDuration !== undefined &&
-      (typeof reportedDuration !== "number" ||
-        !Number.isFinite(reportedDuration))) ||
-    (diagnosticCode !== undefined && typeof diagnosticCode !== "string")
-  ) {
-    throw new Error("Invalid check result.");
-  }
-
   return createCheckResult({
-    checkId,
-    title,
-    level: check.level,
-    phase: check.phase,
-    status,
-    severity,
-    finding,
-    recommendation,
-    ...(subject === undefined ? {} : { subject }),
-    ...(evidence === undefined
-      ? {}
-      : {
-          evidence,
-        }),
-    durationMs: reportedDuration ?? durationMs,
-    ...(diagnosticCode === undefined ? {} : { diagnosticCode }),
+    ...result,
+    durationMs: result.durationMs ?? durationMs,
   });
 }
 

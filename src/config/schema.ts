@@ -4,6 +4,7 @@ import { z } from "zod";
 
 const DEFAULT_TARGET_ROOT = ".";
 const DEFAULT_REPORT_PATH = "sentinel-report.md";
+export const REPORT_FORMATS = ["markdown", "json", "terminal"] as const;
 
 const nonEmptyStringSchema = z
   .string()
@@ -252,6 +253,51 @@ export function createSentinelConfigSchema(
   const filesystemPathSchema = createFilesystemPathSchema(baseDirectory);
   const defaultTargetRoot = resolve(invocationDirectory, DEFAULT_TARGET_ROOT);
   const defaultReportPath = resolve(invocationDirectory, DEFAULT_REPORT_PATH);
+  const reportSchema = z
+    .strictObject({
+      format: z.enum(REPORT_FORMATS).default("markdown"),
+      path: filesystemPathSchema.optional(),
+    })
+    .superRefine((report, context) => {
+      if (report.format === "json" && report.path === undefined) {
+        context.addIssue({
+          code: "custom",
+          path: ["path"],
+          message: "JSON reports require an explicit output path.",
+        });
+      }
+
+      if (report.format === "terminal" && report.path !== undefined) {
+        context.addIssue({
+          code: "custom",
+          path: ["path"],
+          message: "Terminal reports write to stdout and cannot use a path.",
+        });
+      }
+    })
+    .transform((report) => {
+      if (report.format === "terminal") {
+        return {
+          format: "terminal",
+        } as const;
+      }
+
+      if (report.format === "json") {
+        if (report.path === undefined) {
+          return z.NEVER;
+        }
+
+        return {
+          format: "json",
+          path: report.path,
+        } as const;
+      }
+
+      return {
+        format: "markdown",
+        path: report.path ?? defaultReportPath,
+      } as const;
+    });
 
   const apiSchema = z
     .strictObject({
@@ -340,13 +386,10 @@ export function createSentinelConfigSchema(
       .default({
         root: defaultTargetRoot,
       }),
-    report: z
-      .strictObject({
-        path: filesystemPathSchema.default(defaultReportPath),
-      })
-      .default({
-        path: defaultReportPath,
-      }),
+    report: reportSchema.default({
+      format: "markdown",
+      path: defaultReportPath,
+    }),
     api: apiSchema.optional(),
     ui: uiSchema.optional(),
     ai: z

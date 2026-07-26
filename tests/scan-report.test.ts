@@ -38,7 +38,7 @@ test("scanProject passes when a repository README is present", async () => {
 
     const report = await scanProject(configForTarget(targetRoot));
 
-    assert.equal(report.incomplete, false);
+    assert.equal(report.overallSummary.scanStatus, "Complete");
     assert.equal(report.results.length, 4);
     assert.equal(report.results[0]?.checkId, "repository.readme");
     assert.equal(report.results[0]?.status, "Pass");
@@ -56,7 +56,7 @@ test("scanProject warns when a repository README is absent", async () => {
   await withTemporaryRepository(async (targetRoot) => {
     const report = await scanProject(configForTarget(targetRoot));
 
-    assert.equal(report.incomplete, false);
+    assert.equal(report.overallSummary.scanStatus, "Complete");
     assert.equal(report.results[0]?.status, "Warn");
     assert.equal(report.results[0]?.severity, "Low");
   });
@@ -110,7 +110,7 @@ test("scanProject appends one valid AI result without affecting repository check
       },
     });
 
-    assert.equal(report.incomplete, false);
+    assert.equal(report.overallSummary.scanStatus, "Complete");
     assert.deepEqual(
       report.results.map((result) => result.checkId),
       [
@@ -196,7 +196,7 @@ test("an AI execution failure leaves repository results intact and marks the sca
       },
     });
 
-    assert.equal(report.incomplete, true);
+    assert.equal(report.overallSummary.scanStatus, "Incomplete");
     assert.equal(report.results[0]?.status, "Pass");
     assert.equal(report.results[2]?.status, "Skipped");
     assert.equal(report.results[2]?.diagnosticCode, "AI_PROVIDER_ERROR");

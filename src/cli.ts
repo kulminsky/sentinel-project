@@ -4,7 +4,9 @@ import { Command } from "commander";
 
 import { resolveAiSetup } from "./ai/config.js";
 import { loadSentinelConfig } from "./config/load.js";
+import { writeJsonReport } from "./report/json.js";
 import { writeMarkdownReport } from "./report/markdown.js";
+import { renderTerminalReport } from "./report/terminal.js";
 import { scanProject } from "./scan.js";
 
 interface CliOptions {
@@ -26,8 +28,19 @@ async function main(options: CliOptions): Promise<void> {
     resolveEnvironmentReference: loaded.resolveEnvironmentReference,
   });
 
-  await writeMarkdownReport(report, loaded.config.report.path);
-  console.log(`Sentinel report written to ${loaded.config.report.path}`);
+  switch (loaded.config.report.format) {
+    case "markdown":
+      await writeMarkdownReport(report, loaded.config.report.path);
+      console.log(`Sentinel report written to ${loaded.config.report.path}`);
+      break;
+    case "json":
+      await writeJsonReport(report, loaded.config.report.path);
+      console.log(`Sentinel report written to ${loaded.config.report.path}`);
+      break;
+    case "terminal":
+      process.stdout.write(renderTerminalReport(report));
+      break;
+  }
 }
 
 const program = new Command()
