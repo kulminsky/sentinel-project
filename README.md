@@ -8,7 +8,7 @@ Deliver a polished, reviewable MVP that demonstrates deliberate quality-engineer
 
 ## Current Status
 
-**Foundation, AI feasibility, tooling, configuration, concurrent-runner, validated-reporting, repository-analysis, and reproducible-demo-target milestones complete.**
+**Foundation, AI feasibility, tooling, configuration, concurrent-runner, validated-reporting, repository-analysis, Security-analysis, and reproducible-demo-target milestones complete.**
 
 Sentinel currently:
 
@@ -20,7 +20,9 @@ Sentinel currently:
 - Probes configured API and UI services once with bounded, read-only `HEAD` requests and reports missing or unreachable services as notes.
 - Runs the four analysis-level groups concurrently, keeps checks sequential within each level, and isolates every check with its own timeout.
 - Checks `.gitignore` coverage, code-style configuration, tests, CI, TypeScript strictness, dependency freshness, lockfiles, and README quality.
-- Reports explicit `Skipped / Info` coverage rows for unfinished Security, API, and UI analysis.
+- Audits root npm lockfiles, detects high-confidence secrets without reporting their values, and checks `.env` ignore hygiene.
+- Uses configured unauthenticated targets for bounded security-header, CORS, and evidence-derived debug-endpoint observations.
+- Reports explicit `Skipped / Info` coverage rows for unfinished API and UI analysis.
 - Runs or gracefully skips one synthetic semantic API test-gap check.
 - Supports explicit OpenAI or Claude selection for that synthetic check.
 - Validates structured AI findings and rejects unsupported evidence citations.
@@ -28,12 +30,12 @@ Sentinel currently:
 - Includes one normalized Overall Summary with complete status/severity counts and a deterministic narrative.
 - Returns a nonzero exit code only when configuration cannot be loaded, the scan cannot run, or the selected report cannot be rendered or written.
 
-Secret detection, vulnerability analysis, API assertions, static API fallback, Playwright browser automation, and production repository evidence selection are not implemented yet. API/UI endpoint, page, authentication, viewport, and form-flow settings remain dormant; only service targets and timeouts drive reachability probes. The Playwright library is installed for the planned browser milestone, but browser binaries are intentionally not installed.
+API assertions, static API fallback, Playwright browser automation, production AI evidence selection, entropy scanning, and Git-history scanning are not implemented yet. API endpoints and UI pages now support unauthenticated Security observations; endpoint assertions, authentication values, viewports, and form flows remain dormant. The Playwright library is installed for the planned browser milestone, but browser binaries are intentionally not installed.
 
 The repository also contains a runnable, deliberately flawed Express and
-TypeScript target under `sample-app/`. It provides stable future evidence for
-the unfinished Security, API, and UI milestones; its presence does not imply
-that Sentinel detects those seeded flaws yet.
+TypeScript target under `sample-app/`. Sentinel now consumes its Security
+evidence; the seeded API and UI flaws remain fixtures for unfinished
+milestones.
 
 ## Development Setup
 
@@ -58,7 +60,7 @@ Then run the current scan against the repository in the current working director
 npm start
 ```
 
-`npm start` builds the project automatically and writes `sentinel-report.md` in the current working directory. No environment configuration or running target service is required for this default, AI-disabled path. Node/npm targets receive one bounded dependency-freshness query; unavailable npm or registry access produces a skipped note rather than stopping the scan.
+`npm start` builds the project automatically and writes `sentinel-report.md` in the current working directory. No environment configuration or running target service is required for this default, AI-disabled path. Applicable Node/npm targets receive bounded dependency-freshness and vulnerability queries; unavailable npm or registry access produces skipped notes rather than stopping the scan.
 
 Playwright browser downloads are deliberately separate from package installation. This milestone does not include a Playwright configuration, browser installation command, or browser automation.
 
@@ -109,8 +111,8 @@ The fixture intentionally includes:
 
 Health, catalog behavior, non-public CORS behavior, responsive layout, and the
 configured client-side form flow remain correct so the eventual report contains
-meaningful passes as well as findings. The detailed security, API, and browser
-checks that will consume this evidence are still planned. See
+meaningful passes as well as findings. Security checks are implemented; the
+detailed API and browser checks remain planned. See
 [`sample-app/README.md`](sample-app/README.md) for the fixture contract.
 
 ## Configuration
@@ -125,7 +127,7 @@ npm start -- --config ./path/to/sentinel.config.json
 
 Configuration is recursively strict. Invalid values, incomplete supplied sections, and unknown keys stop the scan with a property-specific error; Sentinel never silently replaces invalid configuration with defaults.
 
-See [`docs/configuration.md`](docs/configuration.md) for the complete JSON contract, environment mappings, precedence, path resolution, and credential-reference rules. API/UI targets and timeouts support central reachability probing; their detailed runtime and browser settings are not executed yet.
+See [`docs/configuration.md`](docs/configuration.md) for the complete JSON contract, environment mappings, precedence, path resolution, and credential-reference rules. API/UI targets and timeouts support central reachability probing and unauthenticated Security observations; API assertions and browser behavior are not executed yet.
 
 ## Report Output
 
@@ -150,7 +152,26 @@ Sentinel currently performs these root-focused checks:
 
 The shared inventory does not follow symlinks, retains paths and file metadata rather than repository contents, and excludes dependency, VCS, generated, cache, and vendor trees. Traversal is limited to depth 8, 20,000 entries, and five seconds; inspected text files are limited to 128 KiB. When a bound prevents a reliable absence claim, the affected check is skipped and the report is marked incomplete.
 
-Dependency freshness is informational and separate from the planned npm vulnerability audit. Non-npm package managers receive generic lockfile detection only; deep workspace and package-manager-specific analysis is not implemented.
+Dependency freshness is informational and separate from the npm vulnerability audit. Non-npm package managers receive generic lockfile detection only; deep workspace and package-manager-specific analysis is not implemented.
+
+## Security Analysis
+
+Sentinel currently runs five fixed Security checks:
+
+| Check                   | Implemented behavior                                                                                                                                                    |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| npm dependency audit    | Runs bounded, script-disabled `npm audit` only for a single root npm lockfile. A clean pass requires exit code 0 and a valid, internally consistent empty audit report. |
+| High-confidence secrets | Scans bounded, non-ignored text files for private keys and known provider credential formats; findings contain only relative path, line, and detector category.         |
+| `.env` hygiene          | Warns when real environment files are not ignored or environment templates are themselves ignored.                                                                      |
+| Headers and CORS        | Checks configured unauthenticated API/UI responses for a bounded header baseline and reports wildcard API CORS separately.                                              |
+| Debug endpoints         | Derives candidates from configured paths and bounded Node/TypeScript route declarations, then makes read-only unauthenticated observations where safe.                  |
+
+Security checks do not brute-force routes, resolve target credentials, follow
+redirects, start services, render response/header values, or report detected
+secret values. Missing npm, registry access, runtime configuration, or service
+availability produces a substantive skipped note. Invalid purported audit
+output and bounded-coverage limitations cannot earn a clean pass and mark the
+report incomplete where the result is not trustworthy.
 
 ## Synthetic AI Feasibility Check
 
@@ -214,9 +235,9 @@ This list describes the approved implementation target, not functionality curren
 
 1. **Complete:** Establish the CLI-to-report vertical slice.
 2. **Complete:** Validate the bounded multi-provider AI approach with an early synthetic risk spike.
-3. **In progress:** Configuration, the runner, inventory, stack detection, and repository checks are complete; production redaction remains pending.
-4. Add secret detection and npm-only vulnerability analysis.
-5. **In progress:** Service reachability is complete; add shallow API fallback and safe API/security runtime checks.
+3. **In progress:** Configuration, the runner, inventory, stack detection, and repository checks are complete; production AI evidence redaction remains pending.
+4. **Complete:** Add high-confidence secret detection, `.env` hygiene, and npm-only vulnerability analysis.
+5. **In progress:** Service reachability and Security runtime observations are complete; shallow API fallback and assertions remain pending.
 6. Add the Playwright lifecycle and required browser checks.
 7. Complete AI integration and no-AI fallback behavior.
 8. **In progress:** The reproducible demo target is complete; harden remaining tests and complete the sample report, documentation, and process evidence.
@@ -246,6 +267,15 @@ The repository currently contains the foundation implementation and its document
 │   │   │   ├── node.ts
 │   │   │   ├── static.ts
 │   │   │   └── typescript-config.ts
+│   │   ├── security/
+│   │   │   ├── common.ts
+│   │   │   ├── debug-endpoints.ts
+│   │   │   ├── dependency-audit.ts
+│   │   │   ├── env-hygiene.ts
+│   │   │   ├── files.ts
+│   │   │   ├── headers.ts
+│   │   │   ├── runtime.ts
+│   │   │   └── secrets.ts
 │   │   ├── coverage.ts
 │   │   ├── registry.ts
 │   │   └── service-availability.ts
@@ -290,7 +320,10 @@ The repository currently contains the foundation implementation and its document
 │   ├── repository-inspection.test.ts
 │   ├── result.test.ts
 │   ├── runner.test.ts
-│   └── scan-report.test.ts
+│   ├── scan-report.test.ts
+│   ├── security-audit.test.ts
+│   ├── security-files.test.ts
+│   └── security-runtime.test.ts
 ├── .prettierignore
 ├── .prettierrc.json
 ├── AGENTS.md
@@ -327,8 +360,8 @@ For each milestone:
 - **Tooling — complete:** reproducible npm setup, CLI/config libraries, Vitest, linting, formatting, and CI checks; Playwright browser installation remains deferred.
 - **Configuration — complete:** strict JSON and environment loading, normalized target/report paths, source precedence, and fatal path-specific validation.
 - **Core runner — complete:** four concurrent analysis-level groups, sequential per-level checks, per-check timeouts, isolated failures, and deterministic ordering.
-- **Static analysis — in progress:** bounded inventory, Node/TypeScript detection, and repository checks are complete; security checks remain planned.
-- **Runtime analysis:** centralized API/UI reachability is complete; API fallback/assertions and Playwright checks remain planned.
+- **Static analysis — in progress:** bounded inventory, Node/TypeScript detection, repository checks, npm audit, high-confidence secret detection, and `.env` hygiene are complete; API fallback remains planned.
+- **Runtime analysis — in progress:** centralized API/UI reachability plus unauthenticated header, CORS, and debug-endpoint observations are complete; API assertions and Playwright checks remain planned.
 - **AI analysis:** synthetic multi-provider feasibility is complete; production evidence selection and redaction remain planned.
 - **Submission readiness — in progress:** the standalone demo target is complete;
   the final sample report, remaining documentation, and process evidence are
@@ -338,16 +371,16 @@ For each milestone:
 
 This README should grow with implemented behavior rather than describe planned functionality as complete:
 
-| Milestone                        | README sections to complete or update                                                                                                                                    |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Foundation                       | Completed: Current Status, Development Setup, Project Structure, and the first verified command now reflect the implementation.                                          |
-| Validated reporting              | Completed: Current Status, Configuration, report behavior, model invariants, and Project Structure reflect all three implemented formats.                                |
-| Repository and security analysis | Repository portion complete: Current Status, Repository Analysis, Project Structure, and limitations reflect implemented behavior. Update again after security analysis. |
-| API runtime and fallback         | Update MVP Scope and Project Structure; document verified runtime prerequisites and degradation behavior.                                                                |
-| Playwright                       | Update MVP Scope; document supported browser checks and any verified limitations.                                                                                        |
-| AI feasibility spike             | Completed: Current Status, Development Setup, Project Structure, provider behavior, synthetic data handling, limits, and fallback now reflect the implementation.        |
-| Production AI integration        | Replace synthetic-only guidance with verified evidence selection, redaction, configuration, and sample-report behavior.                                                  |
-| Demo target                      | Completed: Current Status, Development Setup, Sample Target, Project Structure, roadmap, and limitations describe the runnable fixture.                                  |
-| Submission readiness             | Replace remaining planning-oriented status text; add the committed sample report, final known gaps, and process-evidence sections.                                       |
+| Milestone                        | README sections to complete or update                                                                                                                             |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Foundation                       | Completed: Current Status, Development Setup, Project Structure, and the first verified command now reflect the implementation.                                   |
+| Validated reporting              | Completed: Current Status, Configuration, report behavior, model invariants, and Project Structure reflect all three implemented formats.                         |
+| Repository and security analysis | Completed: Current Status, Repository Analysis, Security Analysis, Project Structure, and limitations reflect implemented behavior.                               |
+| API runtime and fallback         | Update MVP Scope and Project Structure; document verified runtime prerequisites and degradation behavior.                                                         |
+| Playwright                       | Update MVP Scope; document supported browser checks and any verified limitations.                                                                                 |
+| AI feasibility spike             | Completed: Current Status, Development Setup, Project Structure, provider behavior, synthetic data handling, limits, and fallback now reflect the implementation. |
+| Production AI integration        | Replace synthetic-only guidance with verified evidence selection, redaction, configuration, and sample-report behavior.                                           |
+| Demo target                      | Completed: Current Status, Development Setup, Sample Target, Project Structure, roadmap, and limitations describe the runnable fixture.                           |
+| Submission readiness             | Replace remaining planning-oriented status text; add the committed sample report, final known gaps, and process-evidence sections.                                |
 
 Planned items should be removed or marked complete only after their implementation and tests are verified.

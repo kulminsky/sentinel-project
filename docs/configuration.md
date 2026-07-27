@@ -119,7 +119,7 @@ All objects are strict: unknown keys are rejected, including inside endpoints, a
 - UI configuration requires exactly two distinctly named viewports.
 - An endpoint, page, or form flow with `useAuthentication: true` requires the corresponding API or UI authentication block.
 
-API/UI base targets and timeouts currently drive one central, read-only reachability probe per configured service. Endpoint expectations, authentication, pages, viewports, and form flows are validated but remain dormant until their runtime and Playwright milestones.
+API/UI base targets and timeouts drive one central, read-only reachability probe per configured service. Unauthenticated API endpoints and UI pages are also eligible for bounded Security header/CORS checks, while configured debug-like paths can contribute static debug-route evidence. Sentinel never resolves target authentication for Security requests. Endpoint assertions, authentication values, viewports, and form flows remain dormant until their API and Playwright milestones.
 
 ## Report Formats
 

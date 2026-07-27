@@ -1,10 +1,6 @@
 import { syntheticAiCheck } from "../ai/check.js";
 import type { Check } from "../core/check.js";
-import {
-  apiCoverageCheck,
-  securityCoverageCheck,
-  uiCoverageCheck,
-} from "./coverage.js";
+import { apiCoverageCheck, uiCoverageCheck } from "./coverage.js";
 import {
   repositoryDependencyFreshnessCheck,
   repositoryLockfileCheck,
@@ -17,6 +13,11 @@ import {
   repositoryReadmeCheck,
   repositoryTestsCheck,
 } from "./repository/static.js";
+import { securityDebugEndpointsCheck } from "./security/debug-endpoints.js";
+import { securityDependencyAuditCheck } from "./security/dependency-audit.js";
+import { securityEnvironmentHygieneCheck } from "./security/env-hygiene.js";
+import { securityHeadersCheck } from "./security/headers.js";
+import { securitySecretScanCheck } from "./security/secrets.js";
 import {
   apiAvailabilityCheck,
   uiAvailabilityCheck,
@@ -31,7 +32,11 @@ export const CHECKS: readonly Check[] = [
   repositoryDependencyFreshnessCheck,
   repositoryLockfileCheck,
   repositoryReadmeCheck,
-  securityCoverageCheck,
+  securityDependencyAuditCheck,
+  securitySecretScanCheck,
+  securityEnvironmentHygieneCheck,
+  securityHeadersCheck,
+  securityDebugEndpointsCheck,
   apiAvailabilityCheck,
   syntheticAiCheck,
   apiCoverageCheck,

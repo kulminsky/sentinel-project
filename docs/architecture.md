@@ -20,9 +20,8 @@ The design favors plain functions, fixed check registration, explicit boundaries
 The repository currently includes a standalone Express and TypeScript sample
 target with its own manifest and lockfile. Root installation installs it with
 package scripts disabled, while its process remains explicitly controlled by
-the reviewer. Its seeded Security, API, and UI flaws are test fixtures for
-future milestones, not evidence that those Sentinel checks are already
-implemented.
+the reviewer. Its Security evidence is consumed by implemented checks; its
+seeded API and UI flaws remain fixtures for future milestones.
 
 ## Approved Architecture
 
@@ -81,7 +80,7 @@ Sentinel then probes only configured API and UI targets:
 
 After probing, Code & Repository, Security, API / Backend, and UI / Browser groups start concurrently. Checks remain sequential within a level. The runner preserves level and registration order, enforces each check timeout with an abort signal, and converts a timeout or exception into one isolated `Skipped / Info` diagnostic row.
 
-Future reachable-service checks consume the cached observations. Unavailable APIs receive static fallback analysis when that milestone is implemented; reachable UIs receive Playwright checks when browser automation is implemented.
+Security checks consume the cached observations before making bounded requests to configured unauthenticated endpoints or pages. Unavailable APIs receive static fallback analysis when that milestone is implemented; reachable UIs receive Playwright checks when browser automation is implemented.
 
 Sentinel never scans localhost ports and never starts, stops, or restarts target services.
 
@@ -135,11 +134,11 @@ The clean run defaults to the invocation directory for `target.root`, `markdown`
 
 Credentials are resolved through environment-variable references and must never be written to reports or logs. Target URLs, ports, paths, credentials, endpoint parameters, and authentication values must not be hardcoded in production source.
 
-The future redaction milestone will register only explicitly referenced values at the boundary that needs them; the configuration loader will not expose or enumerate the merged environment.
+The production AI redaction milestone will register only explicitly referenced values at the boundary that needs them; the configuration loader will not expose or enumerate the merged environment.
 
 Rule customization, custom secret-pattern languages, and per-check plugin configuration are outside the MVP.
 
-API/UI base targets and timeouts currently drive central reachability probing. Endpoint expectations, authentication, pages, viewports, and form flows remain dormant until their runtime and Playwright milestones. The complete implemented contract is documented in `docs/configuration.md`.
+API/UI base targets and timeouts drive central reachability probing. Unauthenticated endpoints and pages are also consumed by Security header/CORS observations, and configured debug-like paths contribute debug-route evidence. Target authentication values are never resolved for these checks. Endpoint assertions, viewports, and form flows remain dormant until their API and Playwright milestones. The complete implemented contract is documented in `docs/configuration.md`.
 
 ## Repository Analysis Boundary
 
@@ -158,11 +157,53 @@ The fixed Code & Repository checks cover:
 
 Generic repositories receive applicable filesystem checks. Root Node/npm and TypeScript evidence enables the deeper checks; pnpm, Yarn, Bun, and unknown stacks receive lockfile-presence behavior without deep adapters.
 
-Dependency freshness runs one read-only, non-scripted `npm outdated --json --long` process with a 10-second timeout and 64 KiB output limit. Missing npm, timeout, or registry failure produces a normal skipped note. Invalid successful structured output is isolated to the check and marks the report incomplete. This analysis is separate from the future npm vulnerability audit.
+Dependency freshness runs one read-only, non-scripted `npm outdated --json --long` process with a 10-second timeout and 64 KiB output limit. Missing npm, timeout, or registry failure produces a normal skipped note. Invalid successful structured output is isolated to the check and marks the report incomplete. This analysis is separate from the implemented npm vulnerability audit.
 
 An incomplete inventory never becomes a false absence warning. Positive evidence remains usable, while an affected absence-based check returns `Skipped / Info` and marks the report incomplete. Repository evidence contains only relative paths, recognized configuration names, and validated package/version metadata; raw file contents, command errors, registry configuration, and credentials are not rendered.
 
-Security, API contract/runtime, and UI browser coverage remain explicitly represented by `Skipped / Info` placeholder rows until their milestones are implemented. Existing API/UI availability and synthetic AI behavior remain active.
+API contract/runtime and UI browser coverage remain explicitly represented by `Skipped / Info` placeholder rows until their milestones are implemented. Existing Security checks, API/UI availability, and synthetic AI behavior remain active.
+
+## Security Analysis Boundary
+
+The fixed Security group runs sequentially in this order:
+
+1. A root npm dependency audit.
+2. A high-confidence secret scan.
+3. Environment-file ignore hygiene.
+4. Runtime security headers and CORS.
+5. Evidence-derived debug endpoints.
+
+The npm audit runs only for a root npm project with exactly one
+`package-lock.json`. It uses one script-disabled, lockfile-only command with a
+12-second timeout and 1 MiB output bound. A clean result requires exit code 0,
+a valid npm audit v2 report, an empty vulnerability object, and internally
+consistent zero counts. Exit code 1 with a valid vulnerability report is
+interpreted as completed analysis; JSON npm error envelopes, other command
+failures, malformed output, and inconsistent counts can never become a pass.
+Findings are capped at 25 packages and contain only validated package metadata.
+
+The secret scan reads only bounded, non-ignored text/source files from the
+shared symlink-safe inventory. It detects private-key material, known provider
+credential formats, and secret-like assignments in environment files. It does
+not use entropy or generic source assignment heuristics. Findings store only a
+relative path, line number, and detector category—never the matched value or
+surrounding source. Environment hygiene separately checks whether real `.env`
+variants are ignored and whether placeholder templates remain reviewable.
+
+Runtime Security checks use cached reachability only as a prerequisite. The
+header check makes separate `GET`, `HEAD`, or `OPTIONS` requests to at most 12
+configured unauthenticated targets. Security requests never resolve target
+credentials or follow redirects. Header values, response bodies, full URLs,
+and transport errors are not rendered. The baseline covers API MIME-sniffing
+protection and HTTPS HSTS; UI CSP/frame protection, MIME-sniffing protection,
+referrer and permissions policies, and HTTPS HSTS; wildcard API CORS is
+reported separately.
+
+Debug candidates come only from configured paths and bounded Node/TypeScript
+route declarations. Sentinel does not brute-force common paths. Public 2xx/3xx
+responses fail; authentication rejection, unavailable runtime, 404, and unsafe
+methods retain static warnings so declared debug evidence never becomes a
+pass.
 
 ## Graceful Degradation
 
@@ -178,6 +219,8 @@ Sentinel should produce the most complete report possible:
 | Repository inventory bounded or partially unreadable           | Preserve positive evidence; skip affected absence claims and mark the scan incomplete. |
 | npm freshness query unavailable                                | Skip freshness analysis without failing or marking the scan incomplete.                |
 | `package-lock.json` or npm audit unavailable                   | Skip vulnerability lookup; never claim the project is clean.                           |
+| npm audit output malformed or internally inconsistent          | Skip the audit result, mark the scan incomplete, and never claim the project is clean. |
+| Runtime Security target unavailable or authentication required | Retain static evidence or emit a scoped skipped note; never send target credentials.   |
 | Playwright launch fails                                        | Continue other checks and mark the scan incomplete.                                    |
 | AI disabled or credential absent                               | Skip only the AI check; the scan remains complete.                                     |
 | AI provider timeout/failure or invalid response                | Skip only the AI check, continue deterministic checks, and mark the scan incomplete.   |
@@ -250,6 +293,9 @@ Required unit tests focus on:
 - Markdown, JSON, and terminal renderer consistency.
 - Bounded file exclusion, stack detection, and repository-check heuristics.
 - npm freshness output validation without live registry access.
+- npm audit envelope/count validation without live registry access.
+- Secret detector coverage and proof that matched values never enter results.
+- Environment-file ignore hygiene, runtime header/CORS policy, and evidence-derived debug routes.
 - Safe endpoint selection and shallow response expectations.
 - AI response and citation validation.
 
@@ -273,9 +319,9 @@ sample run remains mandatory.
 
 1. Build a vertical slice: CLI, minimal config, validated result/summary model, one repository check, and selectable report renderers.
 2. Perform an early AI risk spike using one fixture, explicit OpenAI and Claude adapters, one selected-provider request, and one cited structured result.
-3. Implement configuration, the isolated concurrent runner, redaction, inventory, stack detection, and generic repository checks. Configuration, the runner, inventory, detection, and repository checks are complete; production redaction remains pending.
-4. Add secret detection and npm-only vulnerability analysis.
-5. Add service probes, shallow OpenAPI fallback, and safe API/security runtime checks. Central reachability probing is complete; fallback and runtime assertions are pending.
+3. Implement configuration, the isolated concurrent runner, redaction, inventory, stack detection, and generic repository checks. Configuration, the runner, inventory, detection, and repository checks are complete; production AI evidence redaction remains pending.
+4. Add secret detection and npm-only vulnerability analysis. This milestone is complete.
+5. Add service probes, shallow OpenAPI fallback, and safe API/security runtime checks. Central reachability and Security runtime observations are complete; API fallback and assertions are pending.
 6. Add the Playwright lifecycle and required browser checks.
 7. Complete the bounded AI check and no-AI behavior.
 8. Harden tests, generate the demo report, complete the README, and assemble
@@ -290,11 +336,12 @@ Capture genuine Cursor evidence throughout these milestones rather than reconstr
 
 - Long-running service, dashboard, or hosted UI.
 - Automatic service startup or port scanning.
+- Authenticated Security requests or brute-force debug-path probing.
 - Deep Python, Java, Go, pnpm, or Yarn adapters.
 - Non-read-only API operations, fuzzing, exploitation, or load testing.
 - Complete OpenAPI/JSON Schema validation.
 - Automatic form discovery or application-specific login automation.
-- Git-history secret scanning or full SAST/data-flow analysis.
+- Entropy-based or generic source-assignment secret heuristics, Git-history secret scanning, or full SAST/data-flow analysis.
 - Visual regression or multi-browser/device matrices.
 - AI providers beyond OpenAI and Claude, multi-turn agents, provider comparison, or a provider plugin system.
 - Dynamic check plugins, dependency-injection frameworks, event buses, or job schedulers.

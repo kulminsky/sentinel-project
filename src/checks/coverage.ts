@@ -36,16 +36,6 @@ function createCoverageCheck(metadata: CoverageMetadata): Check {
   };
 }
 
-export const securityCoverageCheck = createCoverageCheck({
-  id: "security.coverage",
-  title: "Security analysis coverage",
-  level: "Security",
-  finding:
-    "Security analysis checks are not implemented in the current milestone.",
-  recommendation:
-    "Implement the approved secret detection and npm vulnerability-analysis milestone.",
-});
-
 export const apiCoverageCheck = createCoverageCheck({
   id: "api.coverage",
   title: "API / Backend analysis coverage",
