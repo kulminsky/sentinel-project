@@ -14,6 +14,7 @@ import {
 } from "../src/checks/ui/session.js";
 import { createSentinelConfigSchema } from "../src/config/schema.js";
 import type { ScanContext, ServiceReachability } from "../src/core/check.js";
+import type { CheckResult } from "../src/core/result.js";
 
 function uiConfiguration(options?: {
   authenticated?: boolean;
@@ -169,6 +170,15 @@ function completedOutcome(
   };
 }
 
+function assertViewportOnlyOverflowWording(
+  result: Pick<CheckResult, "finding" | "recommendation" | "subject">,
+): void {
+  const rendered = JSON.stringify(result);
+  assert.match(result.subject ?? "", /^Horizontal overflow:/);
+  assert.doesNotMatch(rendered, /responsive|breakpoint/i);
+  assert.match(rendered, /viewport/i);
+}
+
 test("missing and unreachable UI targets do not start Playwright", async () => {
   const runSession = vi.fn<UiSessionRunner>();
   const check = createUiBrowserCheck(runSession);
@@ -315,10 +325,19 @@ test("shared page observations render every required UI category honestly", asyn
       ["Console: home", "Warn", "Medium"],
       ["Images: home", "Fail", "Medium"],
       ["Accessibility: home", "Fail", "High"],
-      ["Responsive layout: home", "Pass", "Info"],
+      ["Horizontal overflow: home", "Pass", "Info"],
       ["Form flow: subscription", "Pass", "Info"],
     ],
   );
+  const overflowResult = execution.results.find(
+    (candidate) => candidate.subject === "Horizontal overflow: home",
+  );
+  assert.match(
+    overflowResult?.finding ?? "",
+    /no horizontal document overflow/,
+  );
+  assert.ok(overflowResult);
+  assertViewportOnlyOverflowWording(overflowResult);
   assert.equal(execution.incomplete, false);
   assert.equal(JSON.stringify(execution.results).includes(canary), false);
 });
@@ -523,7 +542,48 @@ test("navigation, page errors, accessibility impact, and overflow map to bounded
       ["Warn", "Medium"],
     ],
   );
+  const overflowResult = execution.results.find(
+    (candidate) => candidate.subject === "Horizontal overflow: home",
+  );
+  assert.ok(overflowResult);
+  assert.equal(overflowResult.status, "Warn");
+  assertViewportOnlyOverflowWording(overflowResult);
   assert.equal(JSON.stringify(execution.results).includes("https://"), false);
+});
+
+test("incomplete overflow observation uses viewport-only wording", async () => {
+  const check = createUiBrowserCheck(() =>
+    Promise.resolve(
+      completedOutcome({
+        pageObservations: [
+          observation("mobile", {
+            horizontalOverflow: {
+              state: "unavailable",
+            },
+          }),
+          observation("desktop"),
+        ],
+      }),
+    ),
+  );
+
+  const execution = await check.run(
+    contextFor({
+      ui: uiConfiguration(),
+    }),
+    new AbortController().signal,
+  );
+  const overflowResult = execution.results.find(
+    (candidate) => candidate.subject === "Horizontal overflow: home",
+  );
+
+  assert.ok(overflowResult);
+  assert.equal(overflowResult.status, "Skipped");
+  assert.equal(
+    overflowResult.diagnosticCode,
+    "UI_HORIZONTAL_OVERFLOW_OBSERVATION_INCOMPLETE",
+  );
+  assertViewportOnlyOverflowWording(overflowResult);
 });
 
 test("authentication and form prerequisites skip only affected targets", async () => {

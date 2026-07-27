@@ -147,8 +147,15 @@ The implemented repository boundary walks the target once, records relative path
 The fixed Code & Repository checks cover:
 
 - `.gitignore` coverage.
-- Recognized linter and formatter configuration.
-- Test files and the Node test script.
+- Readable, nonempty recognized linter and formatter configuration backed by a
+  matching package dependency or relevant npm script. npm-script recognition
+  uses bounded static heuristics for relevant names, tool invocations, and
+  obvious unreachable commands; Sentinel does not parse arbitrary shell syntax
+  or execute either tool.
+- Readable, nonempty test artifacts and, for Node projects, an npm test script
+  that is not an obvious no-op. This bounded static heuristic detects artifacts
+  and never claims that the tests passed or that arbitrary shell logic was
+  validated.
 - Common CI configuration.
 - Resolved root TypeScript strictness.
 - Root npm dependency freshness.
@@ -253,7 +260,7 @@ All browser automation uses Playwright with Chromium:
 - One composite `ui.browser-analysis` check owns one Chromium launch and bounded cleanup attempts for every browser resource. It reuses one public context and, when required, one authenticated context.
 - Missing or unreachable UI services skip browser work before launch. A launch failure produces exactly one `Skipped / Info` diagnostic, recommends `npx playwright install chromium`, marks the report incomplete, and leaves other levels running.
 - Authentication is limited to configured storage state or headers. Header values are resolved only for protected targets and applied only to same-origin requests.
-- Every configured page loads once at each of the two viewports. The same loads provide navigation, console/page-error, broken-image, axe WCAG A/AA, and horizontal-overflow observations. Axe rules that require manual review remain visible as indeterminate results and prevent an accessibility pass.
+- Every configured page loads once at each of the two viewports. The same loads provide navigation, console/page-error, broken-image, axe WCAG A/AA, and horizontal-overflow observations. Absence of overflow does not claim responsive adaptation; application-specific responsive assertions require future explicit configuration. Axe rules that require manual review remain visible as indeterminate results and prevent an accessibility pass.
 - Form flows run at the widest configured viewport. Actions are limited to navigation, fill, check/uncheck, click, exact visible-text, and exact same-origin URL assertions.
 - Every Playwright operation uses the smaller of `ui.timeoutMs` and the remaining 120-second internal budget. A non-cancellable observation timeout closes that page before the next viewport or target; completed categories remain available, later categories are unavailable, and axe runs last.
 - The check uses a 120-second internal budget inside its 125-second runner timeout. Completed findings survive budget exhaustion, which adds a coverage-limited skip and marks the report incomplete. Context and browser cleanup share bounded headroom inside the runner timeout, and cleanup failure marks the result incomplete.
@@ -316,7 +323,7 @@ Required unit tests focus on:
 - Environment-file ignore hygiene, runtime header/CORS policy, and evidence-derived debug routes.
 - Safe endpoint selection and shallow response expectations.
 - Exclusive live/static API mode selection, bounded response handling, and per-endpoint latency.
-- Shared Playwright session behavior, browser-unavailable degradation, page observations, axe severity, authentication isolation, responsive checks, and every configured form-step variant.
+- Shared Playwright session behavior, browser-unavailable degradation, page observations, axe severity, authentication isolation, horizontal-overflow checks, and every configured form-step variant.
 - AI response and citation validation.
 
 Required integration tests cover:
@@ -364,6 +371,7 @@ Capture genuine Cursor evidence throughout these milestones rather than reconstr
 - Automatic form discovery or application-specific login automation.
 - Entropy-based or generic source-assignment secret heuristics, Git-history secret scanning, or full SAST/data-flow analysis.
 - Visual regression or multi-browser/device matrices.
+- General responsive-adaptation claims without explicit configured assertions.
 - AI providers beyond OpenAI and Claude, multi-turn agents, provider comparison, or a provider plugin system.
 - Dynamic check plugins, dependency-injection frameworks, event buses, or job schedulers.
 - Simultaneous multi-format output, ANSI styling, interactive terminal output, or report formats beyond Markdown, JSON, and plain text.

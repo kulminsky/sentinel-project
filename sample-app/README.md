@@ -27,8 +27,9 @@ checks each configured endpoint once: catalog and public-feed contract checks
 pass, profile fails because the live body omits OpenAPI-required `plan`, and the
 slow endpoint exceeds the configured latency threshold. Static fallback is
 explicitly skipped. The shared Playwright session reports successful page loads
-and responsive layout, the deliberate console errors and broken image, the
-axe-detected unlabeled input, and the successful subscription form flow.
+and no horizontal overflow at the configured viewports, the deliberate console
+errors and broken image, the axe-detected unlabeled input, and the successful
+subscription form flow.
 
 If the service is stopped, the same scan performs no endpoint or browser
 requests. Live API analysis is skipped, the configured `openapi.json` receives
@@ -59,8 +60,8 @@ unlabeled form input. Tests preserve these behaviors as fixture requirements.
 
 Other behavior is intentionally sound: health and catalog responses match their
 contracts, no secrets are embedded or exposed, non-public API routes omit
-wildcard CORS, the main page is responsive, and the client-side subscription
-flow succeeds.
+wildcard CORS, the main page has no horizontal overflow at the configured
+viewports, and the client-side subscription flow succeeds.
 
 Do not fix an intentional finding unless the fixture contract and expected
 sample report are being deliberately changed.

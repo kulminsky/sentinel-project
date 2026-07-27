@@ -121,6 +121,25 @@ const CI_ROOT_PATHS = new Set([
   ".buildkite/pipeline.yml",
 ]);
 
+type CodeStyleCategory = "formatter" | "linter";
+type CodeStyleTool =
+  | "biome"
+  | "clang-format"
+  | "deno"
+  | "dprint"
+  | "eslint"
+  | "golangci-lint"
+  | "prettier"
+  | "pylint"
+  | "ruff"
+  | "rustfmt"
+  | "stylelint";
+
+interface DetectedStyleConfig {
+  readonly label: string;
+  readonly tool: CodeStyleTool;
+}
+
 interface IgnoreCandidate {
   readonly label: string;
   readonly path: string;
@@ -301,14 +320,395 @@ function configuredRootFiles(
   return [...names].filter((name) => files.has(name)).sort();
 }
 
+function styleToolForConfig(
+  path: string,
+  category: CodeStyleCategory,
+): CodeStyleTool | undefined {
+  if (path === "biome.json" || path === "biome.jsonc") {
+    return "biome";
+  }
+
+  if (path === "deno.json" || path === "deno.jsonc") {
+    return "deno";
+  }
+
+  if (RUFF_CONFIG_NAMES.includes(path as (typeof RUFF_CONFIG_NAMES)[number])) {
+    return "ruff";
+  }
+
+  if (category === "linter") {
+    if (path.startsWith(".eslintrc") || path.startsWith("eslint.config.")) {
+      return "eslint";
+    }
+
+    if (
+      path.startsWith(".stylelintrc") ||
+      path.startsWith("stylelint.config.")
+    ) {
+      return "stylelint";
+    }
+
+    if (path.startsWith(".golangci.")) {
+      return "golangci-lint";
+    }
+
+    if (path === ".pylintrc" || path === "pylintrc") {
+      return "pylint";
+    }
+
+    return undefined;
+  }
+
+  if (path.startsWith(".prettierrc") || path.startsWith("prettier.config.")) {
+    return "prettier";
+  }
+
+  if (path === ".clang-format") {
+    return "clang-format";
+  }
+
+  if (path === ".rustfmt.toml" || path === "rustfmt.toml") {
+    return "rustfmt";
+  }
+
+  if (
+    path === ".dprint.json" ||
+    path === ".dprint.jsonc" ||
+    path === "dprint.json" ||
+    path === "dprint.jsonc"
+  ) {
+    return "dprint";
+  }
+
+  return undefined;
+}
+
+function scriptInvokes(script: string, commandPattern: string): boolean {
+  return new RegExp(
+    `(?:^|[;&|])\\s*(?:(?:npx(?:\\s+--yes)?|npm\\s+exec(?:\\s+--)?)\\s+)?${commandPattern}(?=\\s|$)(?!\\s+(?:--\\s+)?(?:--help|--version|-h|-v)(?=\\s|$|[;&|]))`,
+    "i",
+  ).test(script);
+}
+
+function withoutTrailingShellComments(script: string): string {
+  return script
+    .split(/\r?\n/)
+    .map((line) =>
+      line
+        .replace(/^\s*#.*$/, "")
+        .replace(/\s+#.*$/, "")
+        .trimEnd(),
+    )
+    .join("\n")
+    .trim();
+}
+
+function simpleSequentialSegments(script: string): readonly string[] {
+  return withoutTrailingShellComments(script)
+    .split(/\s*(?:;|\r?\n)\s*/)
+    .filter((segment) => segment.length > 0);
+}
+
+type ObviousCommandOutcome = "exit" | "failure" | "success" | "unknown";
+
+function obviousCommandOutcome(command: string): ObviousCommandOutcome {
+  const normalized = command.trim().toLowerCase();
+
+  if (/^exit(?:\s+\d+)?$/.test(normalized)) {
+    return "exit";
+  }
+
+  if (
+    /^(?::|true|(?:\/(?:usr\/)?bin\/)?true|command\s+true|echo(?:\s+.*)?|printf(?:\s+.*)?)$/.test(
+      normalized,
+    ) ||
+    /^(?:ba|z|)sh\s+-c\s+(['"])(?::|true|exit(?:\s+0)?)\1$/.test(normalized) ||
+    /^node\s+(?:--eval|-e)\s+(['"])(?:|process\.exit\(0\))\1$/.test(
+      normalized,
+    ) ||
+    /^(?:(?:npx(?:\s+--yes)?|npm\s+exec(?:\s+--)?)\s+)?\S+(?:\s+--)?\s+(?:--help|--version|-h|-v)$/.test(
+      normalized,
+    )
+  ) {
+    return "success";
+  }
+
+  if (
+    /^(?:false|(?:\/(?:usr\/)?bin\/)?false|command\s+false)$/.test(
+      normalized,
+    ) ||
+    /^(?:ba|z|)sh\s+-c\s+(['"])(?:false|exit\s+0*[1-9]\d*)\1$/.test(
+      normalized,
+    ) ||
+    /^node\s+(?:--eval|-e)\s+(['"])process\.exit\(0*[1-9]\d*\)\1$/.test(
+      normalized,
+    )
+  ) {
+    return "failure";
+  }
+
+  return "unknown";
+}
+
+function isObviousTrivialCommand(command: string): boolean {
+  return obviousCommandOutcome(command) !== "unknown";
+}
+
+function definitelyReachesShellExit(segment: string): boolean {
+  const parts = segment
+    .split(/\s*(&&|\|\|)\s*/)
+    .filter((part) => part.length > 0);
+
+  if (parts.length === 0) {
+    return false;
+  }
+
+  let outcome = obviousCommandOutcome(parts[0] ?? "");
+
+  if (outcome === "exit") {
+    return true;
+  }
+
+  for (let index = 1; index + 1 < parts.length; index += 2) {
+    const operator = parts[index];
+    const nextOutcome = obviousCommandOutcome(parts[index + 1] ?? "");
+    const executesNext =
+      (operator === "&&" && outcome === "success") ||
+      (operator === "||" && outcome === "failure");
+
+    if (executesNext) {
+      if (nextOutcome === "exit") {
+        return true;
+      }
+
+      outcome = nextOutcome;
+    } else if (!(
+      (operator === "&&" && outcome === "failure") ||
+      (operator === "||" && outcome === "success")
+    )) {
+      outcome = "unknown";
+    }
+  }
+
+  return false;
+}
+
+function hasObviouslyUnreachableTail(script: string): boolean {
+  const parts = withoutTrailingShellComments(script)
+    .split(/\s*(&&|\|\|)\s*/)
+    .filter((part) => part.length > 0);
+
+  if (parts.length < 3) {
+    return false;
+  }
+
+  let outcome = obviousCommandOutcome(parts[0] ?? "");
+
+  for (let index = 1; index + 1 < parts.length; index += 2) {
+    const operator = parts[index];
+
+    if (
+      outcome === "exit" ||
+      (operator === "&&" && outcome === "failure") ||
+      (operator === "||" && outcome === "success")
+    ) {
+      return true;
+    }
+
+    const executesNext =
+      (operator === "&&" && outcome === "success") ||
+      (operator === "||" && outcome === "failure");
+
+    outcome = executesNext
+      ? obviousCommandOutcome(parts[index + 1] ?? "")
+      : "unknown";
+  }
+
+  return false;
+}
+
+function isRelevantStyleScriptName(
+  name: string,
+  category: CodeStyleCategory,
+): boolean {
+  const normalized = name.trim().toLowerCase();
+  const relevantSegment =
+    category === "linter" ? /^(?:check|lint)$/ : /^(?:fmt|format)$/;
+
+  return normalized
+    .split(/[:_-]/)
+    .some((segment) => relevantSegment.test(segment));
+}
+
+function scriptSupportsStyleTool(
+  name: string,
+  script: string,
+  tool: CodeStyleTool,
+  category: CodeStyleCategory,
+): boolean {
+  if (!isRelevantStyleScriptName(name, category)) {
+    return false;
+  }
+
+  const invokesTool = (segment: string): boolean => {
+    switch (tool) {
+      case "biome":
+        return scriptInvokes(
+          segment,
+          category === "linter"
+            ? "(?:@biomejs/)?biome\\s+(?:check|lint)"
+            : "(?:@biomejs/)?biome\\s+(?:check|format)",
+        );
+      case "clang-format":
+        return scriptInvokes(segment, "clang-format");
+      case "deno":
+        return scriptInvokes(
+          segment,
+          category === "linter" ? "deno\\s+lint" : "deno\\s+fmt",
+        );
+      case "dprint":
+        return scriptInvokes(segment, "dprint");
+      case "eslint":
+        return scriptInvokes(segment, "eslint");
+      case "golangci-lint":
+        return scriptInvokes(segment, "golangci-lint");
+      case "prettier":
+        return scriptInvokes(segment, "prettier");
+      case "pylint":
+        return scriptInvokes(segment, "pylint");
+      case "ruff":
+        return scriptInvokes(
+          segment,
+          category === "linter" ? "ruff\\s+check" : "ruff\\s+format",
+        );
+      case "rustfmt":
+        return (
+          scriptInvokes(segment, "rustfmt") ||
+          scriptInvokes(segment, "cargo\\s+fmt")
+        );
+      case "stylelint":
+        return scriptInvokes(segment, "stylelint");
+    }
+  };
+
+  for (const segment of simpleSequentialSegments(script)) {
+    if (!hasObviouslyUnreachableTail(segment) && invokesTool(segment)) {
+      return true;
+    }
+
+    if (definitelyReachesShellExit(segment)) {
+      return false;
+    }
+  }
+
+  return false;
+}
+
+function hasStyleToolSupport(
+  inspection: RepositoryInspection,
+  tool: CodeStyleTool,
+  category: CodeStyleCategory,
+): boolean {
+  const manifest = inspection.packageManifest;
+
+  if (manifest.state !== "valid") {
+    return false;
+  }
+
+  const packageNames = new Set([
+    ...Object.keys(manifest.data.dependencies),
+    ...Object.keys(manifest.data.devDependencies),
+    ...Object.keys(manifest.data.optionalDependencies),
+  ]);
+  const supportingPackages: Readonly<Record<CodeStyleTool, readonly string[]>> =
+    {
+      biome: ["@biomejs/biome"],
+      "clang-format": ["clang-format"],
+      deno: ["deno"],
+      dprint: ["dprint"],
+      eslint: ["eslint"],
+      "golangci-lint": ["golangci-lint"],
+      prettier: ["prettier"],
+      pylint: ["pylint"],
+      ruff: ["ruff"],
+      rustfmt: ["rustfmt"],
+      stylelint: ["stylelint"],
+    };
+
+  return (
+    supportingPackages[tool].some((packageName) =>
+      packageNames.has(packageName),
+    ) ||
+    Object.entries(manifest.data.scripts).some(([name, script]) =>
+      scriptSupportsStyleTool(name, script, tool, category),
+    )
+  );
+}
+
+async function readableStyleConfigs(
+  inspection: RepositoryInspection,
+  category: CodeStyleCategory,
+  names: ReadonlySet<string>,
+  cache: Map<string, Awaited<ReturnType<typeof readRepositoryText>>>,
+): Promise<{
+  readonly configs: readonly DetectedStyleConfig[];
+  readonly unavailable: boolean;
+}> {
+  const configs: DetectedStyleConfig[] = [];
+  let unavailable = false;
+
+  for (const path of configuredRootFiles(inspection, names)) {
+    let content = cache.get(path);
+
+    if (content === undefined) {
+      content = await readRepositoryText(inspection, path);
+      cache.set(path, content);
+    }
+
+    if (content.state === "ok" && content.content.trim().length > 0) {
+      const tool = styleToolForConfig(path, category);
+
+      if (tool !== undefined) {
+        configs.push({
+          label: path,
+          tool,
+        });
+      }
+    } else if (
+      content.state === "too-large" ||
+      content.state === "unreadable"
+    ) {
+      unavailable = true;
+    }
+  }
+
+  return {
+    configs,
+    unavailable,
+  };
+}
+
 export async function checkCodeStyle(
   inspection: RepositoryInspection,
 ): Promise<CheckExecution> {
-  const linterConfigs = configuredRootFiles(inspection, LINTER_CONFIG_NAMES);
-  const formatterConfigs = configuredRootFiles(
+  const contentCache = new Map<
+    string,
+    Awaited<ReturnType<typeof readRepositoryText>>
+  >();
+  const linterInspection = await readableStyleConfigs(
     inspection,
-    FORMATTER_CONFIG_NAMES,
+    "linter",
+    LINTER_CONFIG_NAMES,
+    contentCache,
   );
+  const formatterInspection = await readableStyleConfigs(
+    inspection,
+    "formatter",
+    FORMATTER_CONFIG_NAMES,
+    contentCache,
+  );
+  const linterConfigs = [...linterInspection.configs];
+  const formatterConfigs = [...formatterInspection.configs];
   let pyprojectUnavailable = false;
 
   if (hasRepositoryFile(inspection, "pyproject.toml")) {
@@ -320,8 +720,14 @@ export async function checkCodeStyle(
           pyproject.content,
         )
       ) {
-        linterConfigs.push("pyproject.toml#tool.ruff");
-        formatterConfigs.push("pyproject.toml#tool.ruff");
+        linterConfigs.push({
+          label: "pyproject.toml#tool.ruff",
+          tool: "ruff",
+        });
+        formatterConfigs.push({
+          label: "pyproject.toml#tool.ruff",
+          tool: "ruff",
+        });
       }
     } else {
       pyprojectUnavailable = true;
@@ -332,24 +738,29 @@ export async function checkCodeStyle(
 
   if (manifest.state === "valid") {
     if (manifest.data.hasEslintConfig) {
-      linterConfigs.push("package.json#eslintConfig");
+      linterConfigs.push({
+        label: "package.json#eslintConfig",
+        tool: "eslint",
+      });
     }
 
     if (manifest.data.hasPrettierConfig) {
-      formatterConfigs.push("package.json#prettier");
+      formatterConfigs.push({
+        label: "package.json#prettier",
+        tool: "prettier",
+      });
     }
-  } else if (
-    manifest.state === "unavailable" &&
-    (linterConfigs.length === 0 || formatterConfigs.length === 0)
-  ) {
+  } else if (manifest.state === "unavailable") {
     return unavailableFileResult(CODE_STYLE_CHECK, "package.json");
   }
 
   if (
-    pyprojectUnavailable &&
+    (pyprojectUnavailable ||
+      linterInspection.unavailable ||
+      formatterInspection.unavailable) &&
     (linterConfigs.length === 0 || formatterConfigs.length === 0)
   ) {
-    return unavailableFileResult(CODE_STYLE_CHECK, "pyproject.toml");
+    return unavailableFileResult(CODE_STYLE_CHECK, "code-style configuration");
   }
 
   if (
@@ -362,40 +773,80 @@ export async function checkCodeStyle(
     );
   }
 
+  const supportedLinterConfigs = linterConfigs.filter((config) =>
+    hasStyleToolSupport(inspection, config.tool, "linter"),
+  );
+  const supportedFormatterConfigs = formatterConfigs.filter((config) =>
+    hasStyleToolSupport(inspection, config.tool, "formatter"),
+  );
   const configured = [
     ...(linterConfigs.length > 0
-      ? [`Linter: ${linterConfigs.join(", ")}`]
+      ? [
+          `Readable linter config: ${linterConfigs
+            .map((config) => config.label)
+            .join(", ")}`,
+        ]
       : []),
     ...(formatterConfigs.length > 0
-      ? [`Formatter: ${formatterConfigs.join(", ")}`]
+      ? [
+          `Readable formatter config: ${formatterConfigs
+            .map((config) => config.label)
+            .join(", ")}`,
+        ]
+      : []),
+    ...(supportedLinterConfigs.length > 0
+      ? [
+          `Supporting linter declaration: ${[
+            ...new Set(supportedLinterConfigs.map((config) => config.tool)),
+          ].join(", ")}`,
+        ]
+      : []),
+    ...(supportedFormatterConfigs.length > 0
+      ? [
+          `Supporting formatter declaration: ${[
+            ...new Set(supportedFormatterConfigs.map((config) => config.tool)),
+          ].join(", ")}`,
+        ]
       : []),
   ];
 
-  if (linterConfigs.length > 0 && formatterConfigs.length > 0) {
+  if (
+    supportedLinterConfigs.length > 0 &&
+    supportedFormatterConfigs.length > 0
+  ) {
     return execution([
       createRepositoryResult(CODE_STYLE_CHECK, {
         status: "Pass",
         severity: "Info",
         finding:
-          "Recognized linter and formatter configuration is present at the repository root.",
+          "Readable, nonempty linter and formatter configuration with supporting package or relevant npm-script evidence was detected at the repository root.",
         recommendation:
-          "Keep linting and formatting configuration enforced by the development workflow.",
+          "Keep the detected configuration and supporting tooling synchronized with the development workflow.",
         evidence: configured,
       }),
     ]);
   }
 
   const missing = [
-    ...(linterConfigs.length === 0 ? ["linter"] : []),
-    ...(formatterConfigs.length === 0 ? ["formatter"] : []),
+    ...(linterConfigs.length === 0
+      ? ["readable, nonempty linter configuration"]
+      : supportedLinterConfigs.length === 0
+        ? ["supporting linter dependency or relevant npm script"]
+        : []),
+    ...(formatterConfigs.length === 0
+      ? ["readable, nonempty formatter configuration"]
+      : supportedFormatterConfigs.length === 0
+        ? ["supporting formatter dependency or relevant npm script"]
+        : []),
   ];
 
   return execution([
     createRepositoryResult(CODE_STYLE_CHECK, {
       status: "Warn",
       severity: "Low",
-      finding: `No recognized ${missing.join(" or ")} configuration was found at the repository root.`,
-      recommendation: `Add explicit ${missing.join(" and ")} configuration appropriate for the project stack.`,
+      finding: `Sentinel could not establish ${missing.join(" and ")} at the repository root.`,
+      recommendation:
+        "Add readable, nonempty configuration and a matching package dependency or relevant npm script for both linting and formatting.",
       ...(configured.length === 0 ? {} : { evidence: configured }),
     }),
   ]);
@@ -417,7 +868,9 @@ function isTestFile(path: string): boolean {
 
   return (
     sourceFileInConventionalDirectory ||
-    /\.(spec|test)\.[^/]+$/i.test(fileName) ||
+    /\.(?:spec|test)\.(?:[cm]?[jt]sx?|py|go|rb|rs|java|kt|kts|scala|swift|php|cs|c|cc|cpp|cxx|h|hpp|sh|bash)$/i.test(
+      fileName,
+    ) ||
     /^test_.+\.py$/i.test(fileName) ||
     /_test\.(go|py)$/i.test(fileName)
   );
@@ -428,61 +881,120 @@ function isRunnableTestScript(script: string | undefined): boolean {
     return false;
   }
 
-  const normalized = script.toLowerCase();
+  const normalized = withoutTrailingShellComments(script);
 
-  return !(
-    normalized.includes("no test specified") ||
-    normalized.includes("no tests configured") ||
-    /^echo\b.*\bexit\s+1\b/.test(normalized)
-  );
+  if (normalized.length === 0) {
+    return false;
+  }
+
+  for (const segment of simpleSequentialSegments(normalized)) {
+    const lowerCaseSegment = segment.toLowerCase();
+    const definitelyExits = definitelyReachesShellExit(segment);
+
+    if (
+      lowerCaseSegment.includes("no test specified") ||
+      lowerCaseSegment.includes("no tests configured") ||
+      /^echo\b.*\bexit\s+1\b/.test(lowerCaseSegment) ||
+      hasObviouslyUnreachableTail(segment)
+    ) {
+      if (definitelyExits) {
+        return false;
+      }
+
+      continue;
+    }
+
+    const commands = segment
+      .split(/\s*(?:&&|\|\|)\s*/)
+      .filter((command) => command.length > 0);
+
+    if (
+      commands.length > 0 &&
+      commands.some((command) => !isObviousTrivialCommand(command))
+    ) {
+      return true;
+    }
+
+    if (definitelyExits) {
+      return false;
+    }
+  }
+
+  return false;
 }
 
-export function checkTests(inspection: RepositoryInspection): CheckExecution {
+export async function checkTests(
+  inspection: RepositoryInspection,
+): Promise<CheckExecution> {
   const testFiles = inspection.entries
     .filter((entry) => entry.kind === "file" && isTestFile(entry.path))
-    .map((entry) => entry.path);
+    .map((entry) => entry.path)
+    .sort();
+  const nonemptyTestFiles: string[] = [];
+  let unavailableTestFile: string | undefined;
+
+  for (const testFile of testFiles) {
+    const content = await readRepositoryText(inspection, testFile);
+
+    if (content.state === "ok" && content.content.trim().length > 0) {
+      nonemptyTestFiles.push(testFile);
+    } else if (
+      content.state === "too-large" ||
+      content.state === "unreadable"
+    ) {
+      unavailableTestFile ??= testFile;
+    }
+  }
+
   const manifest = inspection.packageManifest;
   const testScript =
     manifest.state === "valid" ? manifest.data.scripts["test"] : undefined;
   const runnableTestScript = isRunnableTestScript(testScript);
 
-  if (testFiles.length === 0 && !inspection.complete) {
+  if (nonemptyTestFiles.length === 0 && unavailableTestFile !== undefined) {
+    return unavailableFileResult(TESTS_CHECK, unavailableTestFile);
+  }
+
+  if (nonemptyTestFiles.length === 0 && !inspection.complete) {
     return incompleteInventoryResult(TESTS_CHECK, "repository tests");
   }
 
   if (
     inspection.nodeProject &&
     manifest.state === "unavailable" &&
-    testFiles.length > 0
+    nonemptyTestFiles.length > 0
   ) {
     return unavailableFileResult(TESTS_CHECK, "package.json");
   }
 
-  if (testFiles.length > 0 && (!inspection.nodeProject || runnableTestScript)) {
+  if (
+    nonemptyTestFiles.length > 0 &&
+    (!inspection.nodeProject || runnableTestScript)
+  ) {
     return execution([
       createRepositoryResult(TESTS_CHECK, {
         status: "Pass",
         severity: "Info",
         finding: inspection.nodeProject
-          ? "Test files and a runnable npm test script are present."
-          : "Recognized test files are present.",
+          ? "Test artifacts detected: readable, nonempty files and a non-placeholder npm test script are present."
+          : "Test artifacts detected: readable, nonempty files are present.",
         recommendation:
-          "Keep the test suite runnable and aligned with implemented behavior.",
-        evidence: testFiles.slice(0, 5),
+          "Run the detected test workflow regularly and keep its artifacts aligned with implemented behavior.",
+        evidence: nonemptyTestFiles.slice(0, 5),
       }),
     ]);
   }
 
-  if (testFiles.length > 0) {
+  if (nonemptyTestFiles.length > 0) {
     return execution([
       createRepositoryResult(TESTS_CHECK, {
         status: "Warn",
         severity: "Low",
         finding:
-          "Test files are present, but no runnable npm test script was found.",
+          "Test artifacts detected: readable, nonempty files are present, but no non-placeholder npm test script was found.",
         recommendation:
           "Add a non-placeholder npm test script that runs the repository test suite.",
-        evidence: testFiles.slice(0, 5),
+        evidence: nonemptyTestFiles.slice(0, 5),
       }),
     ]);
   }
@@ -491,9 +1003,12 @@ export function checkTests(inspection: RepositoryInspection): CheckExecution {
     createRepositoryResult(TESTS_CHECK, {
       status: "Warn",
       severity: "Medium",
-      finding: runnableTestScript
-        ? "A test script exists, but no recognized test files were found."
-        : "No recognized test files were found.",
+      finding:
+        testFiles.length > 0
+          ? "Recognized test filenames exist, but no readable, nonempty test artifacts were detected."
+          : runnableTestScript
+            ? "A non-placeholder npm test script was detected, but no readable, nonempty test artifacts were found."
+            : "No readable, nonempty recognized test artifacts were found.",
       recommendation:
         "Add automated tests in a conventional test location and ensure they are runnable from the project workflow.",
     }),
@@ -800,7 +1315,7 @@ export const repositoryCodeStyleCheck = createRepositoryCheck(
 
 export const repositoryTestsCheck = createRepositoryCheck(
   TESTS_CHECK,
-  (context) => Promise.resolve(checkTests(context.repository)),
+  (context) => checkTests(context.repository),
 );
 
 export const repositoryCiCheck = createRepositoryCheck(CI_CHECK, (context) =>

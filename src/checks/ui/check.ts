@@ -101,7 +101,7 @@ function navigationResult(
       subject: pageSubject("Page load", pageName),
       status: "Fail",
       severity: "High",
-      finding: `The configured page did not load successfully at ${failures.length} responsive breakpoint(s).`,
+      finding: `The configured page did not load successfully at ${failures.length} configured viewport(s).`,
       recommendation:
         "Correct the page response, navigation failure, or cross-origin redirect and rerun the browser scan.",
       evidence: failures.slice(0, MAX_EVIDENCE_ITEMS).map((observation) => {
@@ -126,7 +126,7 @@ function navigationResult(
       status: "Skipped",
       severity: "Info",
       finding:
-        "Sentinel could not observe the configured page at every responsive breakpoint.",
+        "Sentinel could not observe the configured page at every configured viewport.",
       recommendation:
         "Review the browser execution diagnostic and rerun the scan.",
       diagnosticCode: "UI_PAGE_OBSERVATION_INCOMPLETE",
@@ -138,7 +138,7 @@ function navigationResult(
     status: "Pass",
     severity: "Info",
     finding:
-      "The configured page loaded successfully at both responsive breakpoints.",
+      "The configured page loaded successfully at both configured viewports.",
     recommendation:
       "Keep the page available with successful same-origin responses.",
     evidence: observations.map((observation) => {
@@ -202,7 +202,7 @@ function consoleResult(
       status: "Skipped",
       severity: "Info",
       finding:
-        "Console behavior could not be verified across every configured breakpoint.",
+        "Console behavior could not be verified across every configured viewport.",
       recommendation:
         "Restore successful page navigation and rerun the browser scan.",
       diagnosticCode: "UI_CONSOLE_OBSERVATION_INCOMPLETE",
@@ -214,7 +214,7 @@ function consoleResult(
     status: "Pass",
     severity: "Info",
     finding:
-      "The page produced no console errors or uncaught exceptions at either breakpoint.",
+      "The page produced no console errors or uncaught exceptions at either configured viewport.",
     recommendation:
       "Keep browser console output free from unexpected error events.",
   });
@@ -275,7 +275,7 @@ function brokenImageResult(
       status: "Skipped",
       severity: "Info",
       finding:
-        "Broken-image coverage could not be completed across every configured breakpoint.",
+        "Broken-image coverage could not be completed across every configured viewport.",
       recommendation:
         "Restore page navigation or browser observation support and rerun the scan.",
       diagnosticCode: "UI_IMAGE_OBSERVATION_INCOMPLETE",
@@ -287,7 +287,7 @@ function brokenImageResult(
     status: "Pass",
     severity: "Info",
     finding:
-      "No broken image resources were detected at either responsive breakpoint.",
+      "No broken image resources were detected at either configured viewport.",
     recommendation: "Keep image resources available and correctly referenced.",
   });
 }
@@ -437,7 +437,7 @@ function accessibilityResult(
       status: "Skipped",
       severity: "Info",
       finding:
-        "The axe accessibility pass could not complete across every configured breakpoint.",
+        "The axe accessibility pass could not complete across every configured viewport.",
       recommendation:
         "Restore page navigation or axe execution and rerun the browser scan.",
       diagnosticCode: "UI_ACCESSIBILITY_UNAVAILABLE",
@@ -449,13 +449,13 @@ function accessibilityResult(
     status: "Pass",
     severity: "Info",
     finding:
-      "The axe WCAG A/AA pass detected no accessibility violations at either breakpoint.",
+      "The axe WCAG A/AA pass detected no accessibility violations at either configured viewport.",
     recommendation:
       "Keep automated accessibility checks in place and supplement them with manual review.",
   });
 }
 
-function responsiveResult(
+function horizontalOverflowResult(
   pageName: string,
   observations: readonly PageViewportObservation[],
 ): CheckResult {
@@ -467,10 +467,10 @@ function responsiveResult(
 
   if (overflowing.length > 0) {
     return result({
-      subject: pageSubject("Responsive layout", pageName),
+      subject: pageSubject("Horizontal overflow", pageName),
       status: "Warn",
       severity: "Medium",
-      finding: `The page overflows horizontally at ${overflowing.length} configured breakpoint(s).`,
+      finding: `The page overflows horizontally at ${overflowing.length} configured viewport(s).`,
       recommendation:
         "Correct the overflowing layout and verify it at both configured viewport sizes.",
       evidence: overflowing
@@ -490,25 +490,25 @@ function responsiveResult(
     )
   ) {
     return result({
-      subject: pageSubject("Responsive layout", pageName),
+      subject: pageSubject("Horizontal overflow", pageName),
       status: "Skipped",
       severity: "Info",
       finding:
-        "Responsive overflow could not be verified at every configured breakpoint.",
+        "Horizontal overflow could not be observed at every configured viewport.",
       recommendation:
         "Restore page navigation or layout observation and rerun the browser scan.",
-      diagnosticCode: "UI_RESPONSIVE_OBSERVATION_INCOMPLETE",
+      diagnosticCode: "UI_HORIZONTAL_OVERFLOW_OBSERVATION_INCOMPLETE",
     });
   }
 
   return result({
-    subject: pageSubject("Responsive layout", pageName),
+    subject: pageSubject("Horizontal overflow", pageName),
     status: "Pass",
     severity: "Info",
     finding:
-      "The page has no horizontal overflow at either configured breakpoint.",
+      "The page has no horizontal document overflow at either configured viewport.",
     recommendation:
-      "Keep responsive layout checks active for both configured viewport sizes.",
+      "Keep horizontal-overflow observations active for both configured viewport sizes; use explicit configured assertions for other layout behavior.",
   });
 }
 
@@ -654,7 +654,7 @@ export function createUiBrowserCheck(
           consoleResult(page.name, observations),
           brokenImageResult(page.name, observations),
           accessibilityResult(page.name, observations),
-          responsiveResult(page.name, observations),
+          horizontalOverflowResult(page.name, observations),
         );
       }
 

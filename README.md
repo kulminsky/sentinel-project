@@ -23,7 +23,7 @@ Sentinel currently:
 - Audits root npm lockfiles, detects high-confidence secrets without reporting their values, and checks `.env` ignore hygiene.
 - Uses configured unauthenticated targets for bounded security-header, CORS, and evidence-derived debug-endpoint observations.
 - Exclusively selects live API contract/latency analysis or static OpenAPI fallback from the cached API reachability result.
-- Runs one composite Playwright Chromium check across configured pages, responsive viewports, axe accessibility, browser errors, broken images, and optional form flows.
+- Runs one composite Playwright Chromium check across configured pages and viewports for axe accessibility, browser errors, broken images, horizontal overflow, and optional form flows.
 - Runs or gracefully skips one synthetic semantic API test-gap check through a provider-neutral typed client.
 - Supports explicit OpenAI or Claude selection while keeping vendor envelopes out of check logic.
 - Uses native schema-constrained output, validates it locally, and fails closed on every unrecognized response.
@@ -121,11 +121,11 @@ The fixture intentionally includes:
   threshold.
 - A broken image, deterministic console error, and unlabeled form input.
 
-Health, catalog behavior, non-public CORS behavior, responsive layout, page
-navigation, and the configured client-side form flow remain correct so the
-report contains meaningful passes as well as findings. The Playwright scan
-reports the deliberate console error, broken image, and axe-detected unlabeled
-input. See
+Health, catalog behavior, non-public CORS behavior, page navigation, absence of
+horizontal overflow at the configured viewports, and the configured client-side
+form flow remain correct so the report contains meaningful passes as well as
+findings. The Playwright scan reports the deliberate console error, broken
+image, and axe-detected unlabeled input. See
 [`sample-app/README.md`](sample-app/README.md) for the fixture contract.
 
 ## Configuration
@@ -152,16 +152,16 @@ Every format contains the same validated Overall Summary and result data. Status
 
 Sentinel currently performs these root-focused checks:
 
-| Check                | Implemented behavior                                                                                                       |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `.gitignore`         | Validates environment, platform, dependency, and detected generated-output coverage without reading ignored secret values. |
-| Linter and formatter | Detects recognized root configuration, including supported `package.json` keys.                                            |
-| Tests                | Detects conventional test files and requires a runnable test script for Node projects.                                     |
-| CI                   | Detects nonempty configuration for common hosted and self-managed CI systems.                                              |
-| TypeScript           | Resolves the root `tsconfig.json` and requires strict mode without disabled strict-family options.                         |
-| Dependency freshness | Runs one read-only `npm outdated` query with a 10-second timeout and bounded output; automated tests use fakes.            |
-| Lockfile             | Detects npm, Yarn, pnpm, and Bun lockfiles and validates npm root-manifest consistency where available.                    |
-| README               | Checks bounded root README content for meaningful purpose, setup or development, and usage guidance.                       |
+| Check                | Implemented behavior                                                                                                                                                                                          |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.gitignore`         | Validates environment, platform, dependency, and detected generated-output coverage without reading ignored secret values.                                                                                    |
+| Linter and formatter | Requires readable, nonempty recognized root configuration plus a matching package dependency or relevant npm script. Script recognition uses a bounded static heuristic; Sentinel does not execute the tools. |
+| Tests                | Detects readable, nonempty conventional test artifacts and requires an npm test script that is not an obvious no-op for Node projects. This is a bounded static heuristic; Sentinel does not run tests.       |
+| CI                   | Detects nonempty configuration for common hosted and self-managed CI systems.                                                                                                                                 |
+| TypeScript           | Resolves the root `tsconfig.json` and requires strict mode without disabled strict-family options.                                                                                                            |
+| Dependency freshness | Runs one read-only `npm outdated` query with a 10-second timeout and bounded output; automated tests use fakes.                                                                                               |
+| Lockfile             | Detects npm, Yarn, pnpm, and Bun lockfiles and validates npm root-manifest consistency where available.                                                                                                       |
+| README               | Checks bounded root README content for meaningful purpose, setup or development, and usage guidance.                                                                                                          |
 
 The shared inventory does not follow symlinks, retains paths and file metadata rather than repository contents, and excludes dependency, VCS, generated, cache, and vendor trees. Traversal is limited to depth 8, 20,000 entries, and five seconds; inspected text files are limited to 128 KiB. When a bound prevents a reliable absence claim, the affected check is skipped and the report is marked incomplete.
 

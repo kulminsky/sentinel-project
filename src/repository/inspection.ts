@@ -236,6 +236,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function isNonemptyRecord(value: unknown): value is Record<string, unknown> {
+  return isRecord(value) && Object.keys(value).length > 0;
+}
+
 function stringRecord(
   value: unknown,
 ): Readonly<Record<string, string>> | undefined {
@@ -324,8 +328,8 @@ async function inspectPackageManifest(
       devDependencies,
       optionalDependencies,
       ...(packageManager === undefined ? {} : { packageManager }),
-      hasEslintConfig: isRecord(parsed["eslintConfig"]),
-      hasPrettierConfig: isRecord(parsed["prettier"]),
+      hasEslintConfig: isNonemptyRecord(parsed["eslintConfig"]),
+      hasPrettierConfig: isNonemptyRecord(parsed["prettier"]),
     },
   };
 }

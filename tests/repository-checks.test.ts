@@ -120,6 +120,12 @@ test("code style requires both linter and formatter configuration", async () => 
   await withTemporaryRepository(async (root) => {
     await writeFile(join(root, "eslint.config.mjs"), "export default [];\n");
     await writeFile(join(root, ".prettierrc.json"), "{}\n");
+    await writeJson(join(root, "package.json"), {
+      devDependencies: {
+        eslint: "1.0.0",
+        prettier: "1.0.0",
+      },
+    });
 
     const pass = await checkCodeStyle(await inspectRepository(root));
     assert.equal(pass.results[0]?.status, "Pass");
@@ -134,6 +140,10 @@ test("code style requires both linter and formatter configuration", async () => 
 test("code style recognizes package-embedded configuration", async () => {
   await withTemporaryRepository(async (root) => {
     await writeJson(join(root, "package.json"), {
+      devDependencies: {
+        eslint: "1.0.0",
+        prettier: "1.0.0",
+      },
       eslintConfig: {
         root: true,
       },
@@ -153,16 +163,34 @@ test("code style recognizes supported Stylelint and Ruff configuration forms", a
       files: {
         "stylelint.config.mjs": "export default {};\n",
         ".prettierrc": "{}\n",
+        "package.json": JSON.stringify({
+          devDependencies: {
+            stylelint: "1.0.0",
+            prettier: "1.0.0",
+          },
+        }),
       },
     },
     {
       files: {
         "ruff.toml": "line-length = 88\n",
+        "package.json": JSON.stringify({
+          scripts: {
+            lint: "ruff check .",
+            format: "ruff format .",
+          },
+        }),
       },
     },
     {
       files: {
         "pyproject.toml": "[tool.ruff]\nline-length = 88\n",
+        "package.json": JSON.stringify({
+          scripts: {
+            lint: "ruff check .",
+            format: "ruff format .",
+          },
+        }),
       },
     },
   ] as const;
@@ -180,6 +208,315 @@ test("code style recognizes supported Stylelint and Ruff configuration forms", a
   }
 });
 
+test("code style does not pass empty or unsupported filename-only configuration", async () => {
+  await withTemporaryRepository(async (root) => {
+    await writeFile(join(root, "eslint.config.mjs"), " \n", "utf8");
+    await writeFile(join(root, ".prettierrc"), "\n", "utf8");
+
+    const empty = await checkCodeStyle(await inspectRepository(root));
+
+    assert.equal(empty.results[0]?.status, "Warn");
+    assert.match(empty.results[0]?.finding ?? "", /readable, nonempty/);
+
+    await writeFile(join(root, "eslint.config.mjs"), "export default [];\n");
+    await writeFile(join(root, ".prettierrc"), "{}\n", "utf8");
+
+    const filenameOnly = await checkCodeStyle(await inspectRepository(root));
+
+    assert.equal(filenameOnly.results[0]?.status, "Warn");
+    assert.match(
+      filenameOnly.results[0]?.finding ?? "",
+      /supporting linter dependency or relevant npm script/,
+    );
+    assert.match(
+      filenameOnly.results[0]?.finding ?? "",
+      /supporting formatter dependency or relevant npm script/,
+    );
+
+    await writeJson(join(root, "package.json"), {
+      devDependencies: {
+        eslint: "1.0.0",
+        prettier: "1.0.0",
+      },
+    });
+    await writeFile(
+      join(root, "eslint.config.mjs"),
+      "x".repeat(MAX_INSPECTED_FILE_BYTES + 1),
+      "utf8",
+    );
+
+    const oversizedConfig = await checkCodeStyle(await inspectRepository(root));
+
+    assert.equal(oversizedConfig.results[0]?.status, "Skipped");
+    assert.equal(oversizedConfig.incomplete, true);
+  });
+});
+
+test("code style rejects irrelevant, informational, and unreachable npm script evidence", async () => {
+  const cases = [
+    {
+      scripts: {
+        postinstall: "eslint --version && prettier --version",
+      },
+      dependencies: {},
+      missing:
+        /supporting linter dependency or relevant npm script.*supporting formatter dependency or relevant npm script/,
+    },
+    {
+      scripts: {
+        lint: "eslint --version",
+      },
+      dependencies: {
+        prettier: "1.0.0",
+      },
+      missing: /supporting linter dependency or relevant npm script/,
+    },
+    {
+      scripts: {
+        format: "prettier --help",
+      },
+      dependencies: {
+        eslint: "1.0.0",
+      },
+      missing: /supporting formatter dependency or relevant npm script/,
+    },
+    {
+      scripts: {
+        lint: "exit 0; eslint .",
+      },
+      dependencies: {
+        prettier: "1.0.0",
+      },
+      missing: /supporting linter dependency or relevant npm script/,
+    },
+    {
+      scripts: {
+        format: "true || prettier --write .",
+      },
+      dependencies: {
+        eslint: "1.0.0",
+      },
+      missing: /supporting formatter dependency or relevant npm script/,
+    },
+    {
+      scripts: {
+        lint: "false && eslint .",
+      },
+      dependencies: {
+        prettier: "1.0.0",
+      },
+      missing: /supporting linter dependency or relevant npm script/,
+    },
+    {
+      scripts: {
+        format: "exit 1; prettier --write .",
+      },
+      dependencies: {
+        eslint: "1.0.0",
+      },
+      missing: /supporting formatter dependency or relevant npm script/,
+    },
+    {
+      scripts: {
+        lint: "echo prep; exit 0; eslint .",
+      },
+      dependencies: {
+        prettier: "1.0.0",
+      },
+      missing: /supporting linter dependency or relevant npm script/,
+    },
+    {
+      scripts: {
+        lint: "echo prep; false && eslint .",
+      },
+      dependencies: {
+        prettier: "1.0.0",
+      },
+      missing: /supporting linter dependency or relevant npm script/,
+    },
+    {
+      scripts: {
+        format: "echo prep; exit 0; prettier --write .",
+      },
+      dependencies: {
+        eslint: "1.0.0",
+      },
+      missing: /supporting formatter dependency or relevant npm script/,
+    },
+    {
+      scripts: {
+        lint: "npm exec eslint -- --version",
+      },
+      dependencies: {
+        prettier: "1.0.0",
+      },
+      missing: /supporting linter dependency or relevant npm script/,
+    },
+    {
+      scripts: {
+        format: "npm exec prettier -- --help",
+      },
+      dependencies: {
+        eslint: "1.0.0",
+      },
+      missing: /supporting formatter dependency or relevant npm script/,
+    },
+    {
+      scripts: {
+        lint: "eslint --version || eslint .",
+      },
+      dependencies: {
+        prettier: "1.0.0",
+      },
+      missing: /supporting linter dependency or relevant npm script/,
+    },
+    {
+      scripts: {
+        format: "prettier --version || prettier --write .",
+      },
+      dependencies: {
+        eslint: "1.0.0",
+      },
+      missing: /supporting formatter dependency or relevant npm script/,
+    },
+    {
+      scripts: {
+        lint: "echo done # ; eslint .",
+      },
+      dependencies: {
+        prettier: "1.0.0",
+      },
+      missing: /supporting linter dependency or relevant npm script/,
+    },
+    {
+      scripts: {
+        format: "echo done # ; prettier --write .",
+      },
+      dependencies: {
+        eslint: "1.0.0",
+      },
+      missing: /supporting formatter dependency or relevant npm script/,
+    },
+    {
+      scripts: {
+        lint: "sh -c 'false' && eslint .",
+      },
+      dependencies: {
+        prettier: "1.0.0",
+      },
+      missing: /supporting linter dependency or relevant npm script/,
+    },
+    {
+      scripts: {
+        format: "sh -c 'false' && prettier --write .",
+      },
+      dependencies: {
+        eslint: "1.0.0",
+      },
+      missing: /supporting formatter dependency or relevant npm script/,
+    },
+    {
+      scripts: {
+        lint: "node -e 'process.exit(1)' && eslint .",
+      },
+      dependencies: {
+        prettier: "1.0.0",
+      },
+      missing: /supporting linter dependency or relevant npm script/,
+    },
+    {
+      scripts: {
+        format: "node -e 'process.exit(1)' && prettier --write .",
+      },
+      dependencies: {
+        eslint: "1.0.0",
+      },
+      missing: /supporting formatter dependency or relevant npm script/,
+    },
+    {
+      scripts: {
+        lint: "true && exit 0; eslint .",
+      },
+      dependencies: {
+        prettier: "1.0.0",
+      },
+      missing: /supporting linter dependency or relevant npm script/,
+    },
+    {
+      scripts: {
+        format: "false || exit 1; prettier --write .",
+      },
+      dependencies: {
+        eslint: "1.0.0",
+      },
+      missing: /supporting formatter dependency or relevant npm script/,
+    },
+    {
+      scripts: {
+        lint: "echo prep || eslint .",
+      },
+      dependencies: {
+        prettier: "1.0.0",
+      },
+      missing: /supporting linter dependency or relevant npm script/,
+    },
+    {
+      scripts: {
+        format: "printf ok || prettier --write .",
+      },
+      dependencies: {
+        eslint: "1.0.0",
+      },
+      missing: /supporting formatter dependency or relevant npm script/,
+    },
+  ] as const;
+
+  for (const fixture of cases) {
+    await withTemporaryRepository(async (root) => {
+      await writeFile(
+        join(root, "eslint.config.mjs"),
+        "export default [];\n",
+        "utf8",
+      );
+      await writeFile(join(root, ".prettierrc"), "{}\n", "utf8");
+      await writeJson(join(root, "package.json"), {
+        scripts: fixture.scripts,
+        devDependencies: fixture.dependencies,
+      });
+
+      const result = await checkCodeStyle(await inspectRepository(root));
+
+      assert.equal(
+        result.results[0]?.status,
+        "Warn",
+        `Unexpected style-script classification: ${JSON.stringify(fixture.scripts)}`,
+      );
+      assert.match(result.results[0]?.finding ?? "", fixture.missing);
+    });
+  }
+});
+
+test("code style accepts reachable tool commands after earlier compound clauses", async () => {
+  await withTemporaryRepository(async (root) => {
+    await writeFile(
+      join(root, "eslint.config.mjs"),
+      "export default [];\n",
+      "utf8",
+    );
+    await writeFile(join(root, ".prettierrc"), "{}\n", "utf8");
+    await writeJson(join(root, "package.json"), {
+      scripts: {
+        lint: "eslint --version || true; eslint .",
+        format: "prettier --version || true; prettier --write .",
+      },
+    });
+
+    const result = await checkCodeStyle(await inspectRepository(root));
+
+    assert.equal(result.results[0]?.status, "Pass");
+  });
+});
+
 test("test presence validates Node test files and a runnable script", async () => {
   await withTemporaryRepository(async (root) => {
     await mkdir(join(root, "tests"));
@@ -190,23 +527,180 @@ test("test presence validates Node test files and a runnable script", async () =
       },
     });
 
-    const pass = checkTests(await inspectRepository(root));
+    const pass = await checkTests(await inspectRepository(root));
     assert.equal(pass.results[0]?.status, "Pass");
+    assert.match(pass.results[0]?.finding ?? "", /test artifacts detected/i);
+    assert.doesNotMatch(pass.results[0]?.finding ?? "", /tests? passed/i);
 
     await writeJson(join(root, "package.json"), {
       scripts: {
         test: 'echo "Error: no test specified" && exit 1',
       },
     });
-    const warning = checkTests(await inspectRepository(root));
+    const warning = await checkTests(await inspectRepository(root));
     assert.equal(warning.results[0]?.status, "Warn");
     assert.equal(warning.results[0]?.severity, "Low");
   });
 });
 
+test("test presence rejects obvious no-op scripts with nonempty artifacts", async () => {
+  const noOpScripts = [
+    "true",
+    "exit 0",
+    ":",
+    "/bin/true",
+    'echo "nothing to run" && exit 0',
+    "exit 0; vitest run",
+    "exit 1; vitest run",
+    "true || vitest run",
+    "false && vitest run",
+    "echo prep; exit 0; vitest run",
+    "exit 0\nvitest run",
+    "false",
+    "exit 1",
+    "npm --version",
+    "true # deliberate no-op",
+    "npm --version || vitest run",
+    "sh -c 'true' || vitest run",
+    "node -e 'process.exit(0)' || vitest run",
+    "sh -c 'false' && vitest run",
+    "node -e 'process.exit(1)' && vitest run",
+    "# vitest run",
+    "# vitest run\ntrue",
+    "# vitest run\nexit 0",
+    "true && exit 0; vitest run",
+    "false || exit 1; vitest run",
+    "echo prep || vitest run",
+    "printf ok || vitest run",
+  ];
+
+  for (const testScript of noOpScripts) {
+    await withTemporaryRepository(async (root) => {
+      await mkdir(join(root, "tests"));
+      await writeFile(
+        join(root, "tests", "feature.test.ts"),
+        "export {};\n",
+        "utf8",
+      );
+      await writeJson(join(root, "package.json"), {
+        scripts: {
+          test: testScript,
+        },
+      });
+
+      const result = await checkTests(await inspectRepository(root));
+
+      assert.equal(
+        result.results[0]?.status,
+        "Warn",
+        `Unexpected test-script classification: ${JSON.stringify(testScript)}`,
+      );
+      assert.equal(result.results[0]?.severity, "Low");
+      assert.match(
+        result.results[0]?.finding ?? "",
+        /no non-placeholder npm test script/i,
+      );
+    });
+  }
+});
+
+test("test presence accepts a reachable test command after an earlier failed branch", async () => {
+  await withTemporaryRepository(async (root) => {
+    await mkdir(join(root, "tests"));
+    await writeFile(
+      join(root, "tests", "feature.test.ts"),
+      "export {};\n",
+      "utf8",
+    );
+    await writeJson(join(root, "package.json"), {
+      scripts: {
+        test: "false && echo skipped; vitest run",
+      },
+    });
+
+    const result = await checkTests(await inspectRepository(root));
+
+    assert.equal(result.results[0]?.status, "Pass");
+  });
+});
+
+test("test presence rejects empty artifacts independently of script evidence", async () => {
+  await withTemporaryRepository(async (root) => {
+    await mkdir(join(root, "tests"));
+    await writeFile(join(root, "tests", "empty.test.ts"), " \n", "utf8");
+    await writeJson(join(root, "package.json"), {
+      scripts: {
+        test: "vitest run",
+      },
+    });
+
+    const result = await checkTests(await inspectRepository(root));
+
+    assert.equal(result.results[0]?.status, "Warn");
+    assert.equal(result.results[0]?.severity, "Medium");
+    assert.match(
+      result.results[0]?.finding ?? "",
+      /no readable, nonempty test artifacts/i,
+    );
+  });
+});
+
+test("test presence ignores non-code files with test-like names", async () => {
+  const paths = ["sample.test.png", "notes.spec.txt"];
+
+  for (const path of paths) {
+    await withTemporaryRepository(async (root) => {
+      await writeFile(join(root, path), "not executable test source\n", "utf8");
+      await writeJson(join(root, "package.json"), {
+        scripts: {
+          test: "vitest run",
+        },
+      });
+
+      const result = await checkTests(await inspectRepository(root));
+
+      assert.equal(
+        result.results[0]?.status,
+        "Warn",
+        `Unexpected test-artifact classification: ${JSON.stringify(path)}`,
+      );
+      assert.equal(result.results[0]?.severity, "Medium");
+      assert.match(
+        result.results[0]?.finding ?? "",
+        /no readable, nonempty test artifacts/i,
+      );
+    });
+  }
+});
+
+test("test presence does not pass an artifact outside the readable size bound", async () => {
+  await withTemporaryRepository(async (root) => {
+    await mkdir(join(root, "tests"));
+    await writeFile(
+      join(root, "tests", "oversized.test.ts"),
+      "x".repeat(MAX_INSPECTED_FILE_BYTES + 1),
+      "utf8",
+    );
+    await writeJson(join(root, "package.json"), {
+      scripts: {
+        test: "vitest run",
+      },
+    });
+
+    const result = await checkTests(await inspectRepository(root));
+
+    assert.equal(result.results[0]?.status, "Skipped");
+    assert.equal(
+      result.results[0]?.diagnosticCode,
+      "REPOSITORY_FILE_UNAVAILABLE",
+    );
+    assert.equal(result.incomplete, true);
+  });
+});
+
 test("test absence is a medium warning", async () => {
   await withTemporaryRepository(async (root) => {
-    const result = checkTests(await inspectRepository(root));
+    const result = await checkTests(await inspectRepository(root));
 
     assert.equal(result.results[0]?.status, "Warn");
     assert.equal(result.results[0]?.severity, "Medium");
@@ -218,7 +712,7 @@ test("test presence ignores placeholder files in conventional directories", asyn
     await mkdir(join(root, "tests"));
     await writeFile(join(root, "tests", ".gitkeep"), "", "utf8");
 
-    const result = checkTests(await inspectRepository(root));
+    const result = await checkTests(await inspectRepository(root));
 
     assert.equal(result.results[0]?.status, "Warn");
     assert.equal(result.results[0]?.severity, "Medium");
@@ -233,7 +727,7 @@ test("incomplete inventory prevents a false test-absence warning", async () => {
     const inspection = await inspectRepository(root, {
       maxEntries: 1,
     });
-    const result = checkTests(inspection);
+    const result = await checkTests(inspection);
 
     assert.equal(result.results[0]?.status, "Skipped");
     assert.equal(
