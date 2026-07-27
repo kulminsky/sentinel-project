@@ -36,6 +36,65 @@ The scan is coordinated by one visible pipeline:
 
 Every check owns an explicit timeout and error boundary. Completion timing never controls report order, and no scheduler or general concurrency framework is used.
 
+The diagram summarizes the shared setup, concurrent level execution, and
+single validated reporting path.
+
+```mermaid
+flowchart TD
+    accTitle: Sentinel scan execution pipeline
+    accDescr: Strict configuration and one shared repository inventory feed cached reachability and four concurrent analysis groups. Checks remain sequential within each group before results are validated, summarized, and rendered.
+
+    A["CLI loads and validates strict configuration"] --> B["Validate target and build one shared repository inventory"]
+    B --> C["Probe configured API and UI services concurrently"]
+    C --> D["Build shared ScanContext with cached reachability"]
+
+    subgraph LEVELS["Four analysis levels run concurrently"]
+        E1["Code and Repository: sequential timeout-isolated checks"]
+        E2["Security: sequential timeout-isolated checks"]
+        E3["API and Backend: sequential timeout-isolated checks"]
+        E4["UI and Browser: sequential timeout-isolated checks"]
+    end
+
+    D --> E1
+    D --> E2
+    D --> E3
+    D --> E4
+    E1 --> F["Validate results and preserve deterministic level and registration order"]
+    E2 --> F
+    E3 --> F
+    E4 --> F
+    F --> G["Create one Overall Summary"]
+    G --> H{"Configured report format"}
+    H -->|Markdown| I["Markdown report"]
+    H -->|JSON| J["JSON report"]
+    H -->|Terminal| K["Plain-text terminal report"]
+```
+
+## Why This Architecture
+
+- **CLI over service:** Sentinel needs direct, read-only access to a local
+  repository and is intended to run on demand. A CLI avoids a daemon, hosted
+  API, persistent state, and deployment infrastructure.
+- **Static-first usefulness:** Repository and contract evidence remains useful
+  when a project is dormant. Runtime checks are conditional enhancements, so an
+  unavailable service does not erase static findings or crash the scan.
+- **One inventory and centralized probes:** Sharing one bounded repository
+  inventory and one reachability observation per configured service avoids
+  duplicate traversal, repeated probes, and contradictory availability
+  decisions.
+- **Concurrent levels, sequential checks:** The four assignment levels can make
+  progress independently, while registration-order execution within each level
+  keeps output deterministic and the concurrency model small.
+- **Fixed registration and plain functions:** The approved checks are known and
+  bounded. A plugin framework, scheduler, or dependency-injection container
+  would add delivery and review risk without improving this MVP.
+- **Bounded expensive integrations:** One shared Playwright session reuses page
+  observations, and one paid AI request caps runtime, cost, and evidence
+  disclosure.
+- **One validated report model:** Every renderer consumes the same
+  runtime-validated results and Overall Summary, so Markdown, JSON, and terminal
+  output preserve identical semantics.
+
 ## Module Boundaries
 
 | Boundary                        | Responsibility                                                                                                                                                 |
@@ -227,6 +286,15 @@ responses fail; authentication rejection, unavailable runtime, 404, and unsafe
 methods retain static warnings so declared debug evidence never becomes a
 pass.
 
+This Security boundary is intentionally conservative. Root npm audit is used
+only where one lockfile supports an authoritative result; high-confidence
+secret patterns avoid noisy entropy and generic-token guesses; `.env` hygiene
+does not render values; and weak or unverifiable CSP, frame, or
+Permissions-Policy strength warns instead of passing. Runtime observations are
+configured or evidence-derived, unauthenticated, and read-only. Full SAST,
+Git-history scanning, authenticated penetration testing, exploitation, and
+complete multi-package-manager auditing remain outside the MVP.
+
 ## Graceful Degradation
 
 Sentinel should produce the most complete report possible:
@@ -252,6 +320,23 @@ Sentinel should produce the most complete report possible:
 The CLI returns a nonzero exit code only for fatal tool errors. Target findings, unavailable services, and isolated check failures remain report content.
 
 ## OpenAPI and Runtime Safety
+
+The cached API reachability observation selects one analysis mode for the
+entire scan.
+
+```mermaid
+flowchart TD
+    accTitle: Exclusive API analysis mode selection
+    accDescr: Cached API reachability selects live analysis, static OpenAPI fallback, or scoped skips. Endpoint failures after a reachable probe never switch the scan to static fallback.
+
+    A{"Cached API reachability"}
+    A -->|reachable| B["Live contract and latency analysis active"]
+    B --> C["Static OpenAPI fallback inactive: Skipped"]
+    B -->|Endpoint fails| D["Scoped live-mode result; no fallback switch"]
+    A -->|unreachable| E["Runtime analysis inactive: Skipped"]
+    E --> F["Static OpenAPI fallback active"]
+    A -->|not configured| G["Availability, runtime, and fallback checks: Skipped"]
+```
 
 OpenAPI support is deliberately shallow:
 
@@ -295,6 +380,40 @@ Playwright objects do not escape into the scan coordinator or report module.
 ## AI Boundary
 
 The required AI check performs semantic test-gap analysis by comparing a bounded selection of API contracts or route evidence with relevant tests.
+
+The diagram shows the only path from target evidence to an AI-backed result,
+including the gates that prevent unsafe transmission or unvalidated output.
+
+```mermaid
+flowchart TD
+    accTitle: Fail-closed AI evidence and result flow
+    accDescr: One configured OpenAPI contract and one related test are bounded and redacted before a single selected provider request. Only locally validated outcomes enter Sentinel results; unsafe evidence and unavailable provider responses fail closed.
+
+    A["Configured target OpenAPI contract"] --> C["Select one related test"]
+    B["At most 12 bounded test candidates"] --> C
+    C --> D["Redact credentials and enforce the 8 KiB evidence limit"]
+    D --> E{"Evidence safe and sufficient?"}
+    E -->|No| F["Skipped / Info; complete scan; no provider request"]
+    E -->|Yes| G["Atomically reserve the one-call allowance"]
+    G --> H["Provider-neutral structured AI client"]
+    G -->|Allowance unavailable| Q["Skipped / Info; incomplete execution"]
+    H --> I{"Explicit selected transport"}
+    I -->|OpenAI| J["Native schema-constrained OpenAI request"]
+    I -->|Claude| K["Native schema-constrained Claude request"]
+    J --> L["Structured provider response"]
+    K --> L
+    J -->|Provider unavailable| Q
+    K -->|Provider unavailable| Q
+    L --> M["Validate envelope, Zod schema, exact citations, and output safety"]
+    M -->|Invalid or unrecognized| Q
+    M --> N{"Validated outcome"}
+    N -->|gap| O["Warn or Fail"]
+    N -->|no_supported_gap| P["Skipped / Info; complete scan"]
+    F --> R["Normalized CheckResult only"]
+    O --> R
+    P --> R
+    Q --> R
+```
 
 The MVP uses:
 

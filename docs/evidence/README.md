@@ -32,24 +32,38 @@ Sentinel was developed as a sequence of bounded milestones:
 7. Audit the finished MVP against the original brief and use the findings to
    drive submission hardening.
 
+The diagram summarizes the chronological progression; the table beneath it
+provides the corresponding commit evidence.
+
+```mermaid
+flowchart TD
+    accTitle: Sentinel incremental development timeline
+    accDescr: Seven bounded phases progress from requirements and architecture through implementation, runtime analysis, skeptical review, and submission hardening.
+
+    P1["1. Requirements and architecture"] --> P2["2. Runnable foundation, AI spike, and tooling"]
+    P2 --> P3["3. Configuration, runner, and report model"]
+    P3 --> P4["4. Repository analysis and sample target"]
+    P4 --> P5["5. Security and AI hardening"]
+    P5 --> P6["6. API and Playwright runtime analysis"]
+    P6 --> P7["7. Truthfulness and submission hardening"]
+```
+
 The Git history corroborates that progression. It is linear rather than
 squashed into one final implementation commit:
 
-| Phase                             | Commits                         | Result                                                                                                                                 |
-| --------------------------------- | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Inception and design baseline     | `afd99e9`, `ce6a1fb`            | Seeded the repository, then documented scope, architecture, decisions, and agent rules before production code.                         |
-| Executable foundation and tooling | `564eded`, `24e187f`, `e7c80d6` | Added the first CLI/report slice, the early multi-provider AI spike, and clean-machine tooling/CI.                                     |
-| Platform core                     | `69d306a`, `aa9edd8`, `33c8f39` | Added strict configuration, cached reachability with concurrent level execution, and validated Markdown/JSON/terminal reporting.       |
-| Static analysis and demo          | `7369a43`, `acf114b`            | Added bounded repository analysis and the standalone deliberately flawed sample application.                                           |
-| Security and AI hardening         | `59f7997`, `c12552c`, `3e45588` | Added five Security checks, hardened provider-neutral fail-closed AI execution, and documented a manual synthetic OpenAI verification. |
-| Runtime API and browser analysis  | `310de71`, `dc33341`            | Added exclusive live/static API analysis and the shared Playwright Chromium session.                                                   |
-| Truthfulness hardening            | `06cc64a`                       | Tightened repository evidence and narrowed the UI claim from general responsiveness to observed horizontal overflow.                   |
+| Phase                                 | Commits                         | Result                                                                                                                                                                  |
+| ------------------------------------- | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Inception and design baseline         | `afd99e9`, `ce6a1fb`            | Seeded the repository, then documented scope, architecture, decisions, and agent rules before production code.                                                          |
+| Executable foundation and tooling     | `564eded`, `24e187f`, `e7c80d6` | Added the first CLI/report slice, the early multi-provider AI spike, and clean-machine tooling/CI.                                                                      |
+| Platform core                         | `69d306a`, `aa9edd8`, `33c8f39` | Added strict configuration, cached reachability with concurrent level execution, and validated Markdown/JSON/terminal reporting.                                        |
+| Static analysis and demo              | `7369a43`, `acf114b`            | Added bounded repository analysis and the standalone deliberately flawed sample application.                                                                            |
+| Security and AI hardening             | `59f7997`, `c12552c`, `3e45588` | Added five Security checks, hardened provider-neutral fail-closed AI execution, and documented a manual synthetic OpenAI verification.                                  |
+| Runtime API and browser analysis      | `310de71`, `dc33341`            | Added exclusive live/static API analysis and the shared Playwright Chromium session.                                                                                    |
+| Truthfulness and submission hardening | `06cc64a`, `62b7580`            | Tightened evidence and UI claims, then finalized target-derived AI safety, report semantics, tracked deliverables, evidence documentation, and submission verification. |
 
-The artifacts reviewed for this index also show a submission-hardening phase
-after `06cc64a`, including target-derived AI evidence, report-summary
-corrections, a sample-report candidate intended for a tracked location, and
-this evidence pack. That phase is separate from the 16-commit timeline above
-because it had no commit at the time of this evidence review.
+The 17-commit timeline includes the submission-hardening work that followed
+`06cc64a`. Target-derived AI evidence, report-summary corrections, the tracked
+sample report, and this evidence pack later landed together in `62b7580`.
 
 ## Screenshot Catalog
 
@@ -113,7 +127,7 @@ The sample application's construction in `acf114b` has no dedicated capture;
 | -------------------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`18.jpg`](./18.jpg) | Demo running versus stopped   | Shows two full scans that both exited 0 without hangs or crashes, plus the change from live Security/API/UI findings to stopped-service fallback and skips. The Axe-driven incomplete status and “responsive layout” wording are historical behavior.                                                                | Integrated runtime validation | Prove graceful degradation and mode switching against the real demo target.                | Represents the integrated state after `dc33341` and before later truthfulness corrections in `06cc64a` and the subsequent submission-hardening phase. |
 | [`19.jpg`](./19.jpg) | Row-by-row truthfulness audit | Shows a 32-row audit against files, endpoints, and page evidence. It identifies a misleading summary, target-local CI wording, and an independent-browser replay limitation. A later, stricter pass-only review found additional risks.                                                                              | Post-integration review       | Challenge clean and Pass results rather than accepting the generated report at face value. | The review cycle led into `06cc64a` and later report-summary work; no exact hash is visible.                                                          |
-| [`20.jpg`](./20.jpg) | Submission-readiness audit    | Shows a sub-agent-assisted comparison with the assignment and a separate README claim audit. It identified the then-synthetic AI evidence and missing public deliverables as blockers. Some visible findings are now historical, including the statement that the public repository contained only the first commit. | Final requirements audit      | Find brief violations and unsupported claims before a reviewer does.                       | Occurs after the implemented levels and leads into the submission-hardening phase after `06cc64a`.                                                    |
+| [`20.jpg`](./20.jpg) | Submission-readiness audit    | Shows a sub-agent-assisted comparison with the assignment and a separate README claim audit. It identified the then-synthetic AI evidence and missing public deliverables as blockers. Some visible findings are now historical, including the statement that the public repository contained only the first commit. | Final requirements audit      | Find brief violations and unsupported claims before a reviewer does.                       | Occurs after the implemented levels and leads into the submission-hardening work finalized in `62b7580`; the screenshot does not display that hash.   |
 
 ## How the Implementation Evolved
 

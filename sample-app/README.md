@@ -6,20 +6,51 @@ in memory, and needs no database, credentials, or external services.
 
 ## Setup and Run
 
-From the Sentinel repository root, install both projects and start the target:
+Use Node.js 20.19 or later and npm. The root install also installs this
+standalone package from its lockfile; it does not download Chromium. Sentinel
+never starts or stops the sample process.
 
-```sh
+### Linux or WSL (Bash)
+
+From the Sentinel repository root, prepare and start the target in terminal 1:
+
+```bash
+npm install
+npx playwright install --with-deps chromium
+npm run sample:start
+```
+
+On Playwright-supported Linux distributions, installing system dependencies
+may require administrator privileges. If those packages are already managed,
+use `npx playwright install chromium` instead.
+
+In terminal 2:
+
+```bash
+curl --fail http://127.0.0.1:4310/health
+npm run sample:scan
+```
+
+### Native Windows (PowerShell)
+
+From the Sentinel repository root, prepare and start the target in terminal 1:
+
+```powershell
 npm install
 npx playwright install chromium
 npm run sample:start
 ```
 
-The app listens on `http://127.0.0.1:4310` by default. In a second terminal, run
-Sentinel against the committed configuration:
+In terminal 2:
 
-```sh
+```powershell
+Invoke-RestMethod http://127.0.0.1:4310/health
 npm run sample:scan
 ```
+
+The app listens on `http://127.0.0.1:4310` by default. Stop it with `Ctrl+C` in
+terminal 1 after the scan. WSL follows the Linux instructions; native Windows
+uses PowerShell.
 
 The scan writes the ignored local file `sample-app/sentinel-report.md`; the
 reviewable generated artifact is
