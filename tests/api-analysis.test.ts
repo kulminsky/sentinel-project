@@ -2386,6 +2386,69 @@ test("an empty OpenAPI document cannot earn a static pass", async () => {
   });
 });
 
+test("a malformed supported operation prevents a document-level pass", async () => {
+  await withTemporaryRepository(async (root) => {
+    await writeFile(
+      join(root, "openapi.json"),
+      openApiDocument({
+        "/valid": {
+          get: jsonOperation({}),
+        },
+        "/malformed": {
+          get: "not-an-operation",
+        },
+      }),
+    );
+    const context = await createContext({
+      root,
+      endpoints: [],
+      reachability: unreachable(),
+      fetch: () => Promise.reject(new Error("Unexpected request.")),
+    });
+
+    const fallback = await apiStaticOpenApiCheck.run(
+      context,
+      new AbortController().signal,
+    );
+
+    assert.equal(fallback.results.length, 1);
+    assert.equal(fallback.results[0]?.status, "Warn");
+    assert.equal(fallback.results[0]?.severity, "Medium");
+    assert.match(fallback.results[0]?.finding ?? "", /without response/);
+  });
+});
+
+test("a pre-aborted live API check never starts an endpoint request", async () => {
+  await withTemporaryRepository(async (root) => {
+    await writeFile(
+      join(root, "openapi.json"),
+      openApiDocument({
+        "/items": {
+          get: jsonOperation({}),
+        },
+      }),
+    );
+    let requests = 0;
+    const context = await createContext({
+      root,
+      endpoints: [endpoint("items", "/items")],
+      reachability: reachable(),
+      fetch: () => {
+        requests += 1;
+        return Promise.resolve(Response.json({}));
+      },
+    });
+    const controller = new AbortController();
+    controller.abort();
+
+    const live = await apiRuntimeContractCheck.run(context, controller.signal);
+
+    assert.equal(requests, 0);
+    assert.equal(live.results[0]?.status, "Skipped");
+    assert.equal(live.results[0]?.diagnosticCode, "API_ENDPOINT_TIMEOUT");
+  });
+});
+
 test("unsupported response schemas prevent a document coverage pass without configured endpoints", async () => {
   await withTemporaryRepository(async (root) => {
     await writeFile(

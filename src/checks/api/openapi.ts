@@ -364,7 +364,16 @@ function normalizeOperations(
 
     for (const method of SAFE_METHODS) {
       const operationValue = pathValue[method.toLowerCase()];
+      if (operationValue === undefined) {
+        continue;
+      }
+
       if (!isRecord(operationValue)) {
+        operations.push({
+          method,
+          pathTemplate,
+          responses: [],
+        });
         continue;
       }
 

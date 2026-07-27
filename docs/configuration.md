@@ -202,6 +202,13 @@ Report format and path follow the same precedence as other values. A higher-prec
 
 ## Credentials
 
-Configuration stores environment-variable references, never target credential values. Live API checks resolve referenced header values only for endpoints that request authentication and never render them; missing values skip only the affected endpoint. AI continues to read only `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` for the selected provider. Missing optional provider credentials skip only the AI check.
+Configuration stores environment-variable references, never target credential
+values. Live API checks resolve referenced header values only for endpoints
+that request authentication and never render them; missing values skip only the
+affected endpoint. AI reads only `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` for the
+selected provider. When enabled, it also requires the configured
+`api.openApiPath` plus one bounded related test artifact from the repository;
+insufficient evidence or a missing optional provider credential skips only the
+AI check without making a request.
 
 Never commit real credentials to JSON, `.env`, tests, or documentation.

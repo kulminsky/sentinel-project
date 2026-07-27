@@ -21,15 +21,20 @@ Sentinel against the committed configuration:
 npm run sample:scan
 ```
 
-The scan writes the ignored local file `sample-app/sentinel-report.md`. Sentinel
-does not start or stop this process. With the service running, API analysis
-checks each configured endpoint once: catalog and public-feed contract checks
-pass, profile fails because the live body omits OpenAPI-required `plan`, and the
-slow endpoint exceeds the configured latency threshold. Static fallback is
-explicitly skipped. The shared Playwright session reports successful page loads
-and no horizontal overflow at the configured viewports, the deliberate console
-errors and broken image, the axe-detected unlabeled input, and the successful
+The scan writes the ignored local file `sample-app/sentinel-report.md`; the
+reviewable generated artifact is
+[`docs/sample-report.md`](../docs/sample-report.md). Sentinel does not start or
+stop this process. With the service running, API analysis checks each configured
+endpoint once: catalog and public-feed contract checks pass, profile fails
+because the live body omits OpenAPI-required `plan`, and the slow endpoint
+exceeds the configured latency threshold. Static fallback is explicitly
+skipped. The shared Playwright session reports successful page loads and no
+horizontal overflow at the configured viewports, the deliberate console errors
+and broken image, the axe-detected unlabeled input, and the successful
 subscription form flow.
+
+The provided report enabled OpenAI selection without an available credential,
+so it records the explicit no-key fallback and made no paid request.
 
 If the service is stopped, the same scan performs no endpoint or browser
 requests. Live API analysis is skipped, the configured `openapi.json` receives

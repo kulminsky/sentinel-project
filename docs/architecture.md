@@ -88,7 +88,11 @@ Sentinel never scans localhost ports and never starts, stops, or restarts target
 
 Each check has a stable ID, title, analysis level, phase, required timeout, and plain function receiving the shared context and a per-check abort signal.
 
-Each check execution returns one or more results plus an explicit incomplete flag. Empty, invalid, or inconsistent output is isolated as a single execution-error result. Handled missing prerequisites remain normal skips, while internal timeouts and execution failures mark the report incomplete.
+Each check execution returns one or more results plus an explicit incomplete
+flag for incomplete execution or bounded coverage. Empty, invalid, or
+inconsistent output is isolated as a single execution-error result. Handled
+missing prerequisites remain normal skips. Indeterminate evidence stays visible
+on its result but does not make the whole execution incomplete.
 
 Each result represents one stable check-and-subject pair and contains:
 
@@ -108,9 +112,13 @@ Result rules:
 - A missing prerequisite produces one `Skipped / Info` result with a substantive finding and enablement recommendation.
 - Independently actionable subjects produce separate warning or failure results.
 - A check does not emit a generic pass alongside issue results.
-- Internal execution errors are not normal skips: they use a diagnostic code and make the report summary state that the scan was incomplete.
+- Internal execution errors are not normal skips: they use a diagnostic code and make the report summary state that execution or coverage was incomplete.
 - All evidence and diagnostics are redacted before being stored or rendered.
-- One normalized Overall Summary stores the scan status, total, every status/severity count including zeroes, and the deterministic complete/incomplete narrative. Renderers never recalculate it.
+- One normalized Overall Summary stores the scan status, total, every
+  status/severity count including zeroes, and a deterministic narrative.
+  `Incomplete` means execution or bounded coverage did not complete; it does not
+  describe an indeterminate but successfully collected observation. Renderers
+  never recalculate it.
 
 ## Configuration
 
@@ -134,7 +142,10 @@ The clean run defaults to the invocation directory for `target.root`, `markdown`
 
 Credentials are resolved through environment-variable references and must never be written to reports or logs. Target URLs, ports, paths, credentials, endpoint parameters, and authentication values must not be hardcoded in production source.
 
-The production AI redaction milestone will register only explicitly referenced values at the boundary that needs them; the configuration loader will not expose or enumerate the merged environment.
+AI evidence selection does not enumerate the merged environment. It redacts
+recognized credential, private-key, authentication, URL-credential, and
+secret-like assignment patterns before target evidence reaches the provider
+boundary.
 
 Rule customization, custom secret-pattern languages, and per-check plugin configuration are outside the MVP.
 
@@ -168,7 +179,8 @@ Dependency freshness runs one read-only, non-scripted `npm outdated --json --lon
 
 An incomplete inventory never becomes a false absence warning. Positive evidence remains usable, while an affected absence-based check returns `Skipped / Info` and marks the report incomplete. Repository evidence contains only relative paths, recognized configuration names, and validated package/version metadata; raw file contents, command errors, registry configuration, and credentials are not rendered.
 
-API contract/runtime and UI browser analysis are implemented. Existing Security checks, API/UI availability, and synthetic AI behavior remain active.
+API contract/runtime, UI browser analysis, and bounded target-derived AI
+analysis are implemented.
 
 ## Security Analysis Boundary
 
@@ -190,9 +202,11 @@ failures, malformed output, and inconsistent counts can never become a pass.
 Findings are capped at 25 packages and contain only validated package metadata.
 
 The secret scan reads only bounded, non-ignored text/source files from the
-shared symlink-safe inventory. It detects private-key material, known provider
-credential formats, and secret-like assignments in environment files. It does
-not use entropy or generic source assignment heuristics. Findings store only a
+shared symlink-safe inventory. It detects complete, plausible armored
+private-key blocks, known provider credential formats, and secret-like
+assignments in environment files. Detector definitions, lone key markers, and
+incomplete or implausibly short blocks do not count as credentials. It does not
+use entropy or generic source assignment heuristics. Findings store only a
 relative path, line number, and detector category—never the matched value or
 surrounding source. Environment hygiene separately checks whether real `.env`
 variants are ignored and whether placeholder templates remain reviewable.
@@ -202,9 +216,10 @@ header check makes separate `GET`, `HEAD`, or `OPTIONS` requests to at most 12
 configured unauthenticated targets. Security requests never resolve target
 credentials or follow redirects. Header values, response bodies, full URLs,
 and transport errors are not rendered. The baseline covers API MIME-sniffing
-protection and HTTPS HSTS; UI CSP/frame protection, MIME-sniffing protection,
-referrer and permissions policies, and HTTPS HSTS; wildcard API CORS is
-reported separately.
+protection and strong HTTPS HSTS; UI restrictive CSP and frame protection,
+MIME-sniffing protection, safe referrer policy, restrictive permissions policy,
+and strong HTTPS HSTS; wildcard API CORS is reported separately. Weak or
+unrecognized policy syntax produces a warning rather than an unearned pass.
 
 Debug candidates come only from configured paths and bounded Node/TypeScript
 route declarations. Sentinel does not brute-force common paths. Public 2xx/3xx
@@ -246,6 +261,8 @@ OpenAPI support is deliberately shallow:
 - Request at most 12 configured `GET`, `HEAD`, or `OPTIONS` endpoints sequentially, once each, without following redirects.
 - Check configured and documented status, content type, JSON parseability, supported top-level JSON response type, required fields, direct property types, and latency to response headers. Schema types follow the declared OpenAPI 3.0/3.1 dialect; OpenAPI 3.0 arrays remain a visible limitation because their required nested `items` schema is outside the shallow validator. Matched non-JSON schemas produce a visible limitation rather than an unverified shape pass.
 - Limit response bodies to 256 KiB and preserve completed findings when an endpoint, body, or internal deadline bound limits coverage.
+- Keep malformed configured read-only operations visible so they prevent a
+  document-level contract pass.
 
 The inactive mode emits one explicit skipped result. Endpoint transport failures after a successful central probe never trigger fallback during that scan. Missing authentication references skip only the affected endpoint, and target credentials are used only as request headers.
 
@@ -260,7 +277,13 @@ All browser automation uses Playwright with Chromium:
 - One composite `ui.browser-analysis` check owns one Chromium launch and bounded cleanup attempts for every browser resource. It reuses one public context and, when required, one authenticated context.
 - Missing or unreachable UI services skip browser work before launch. A launch failure produces exactly one `Skipped / Info` diagnostic, recommends `npx playwright install chromium`, marks the report incomplete, and leaves other levels running.
 - Authentication is limited to configured storage state or headers. Header values are resolved only for protected targets and applied only to same-origin requests.
-- Every configured page loads once at each of the two viewports. The same loads provide navigation, console/page-error, broken-image, axe WCAG A/AA, and horizontal-overflow observations. Absence of overflow does not claim responsive adaptation; application-specific responsive assertions require future explicit configuration. Axe rules that require manual review remain visible as indeterminate results and prevent an accessibility pass.
+- Every configured page loads once at each of the two viewports. The same loads
+  provide navigation, console/page-error, broken-image, axe WCAG A/AA, and
+  horizontal-overflow observations. Absence of overflow does not claim
+  responsive adaptation; application-specific responsive assertions require
+  future explicit configuration. Axe rules that require manual review remain
+  visible as indeterminate results and prevent an accessibility pass without
+  marking successful browser execution incomplete.
 - Form flows run at the widest configured viewport. Actions are limited to navigation, fill, check/uncheck, click, exact visible-text, and exact same-origin URL assertions.
 - Every Playwright operation uses the smaller of `ui.timeoutMs` and the remaining 120-second internal budget. A non-cancellable observation timeout closes that page before the next viewport or target; completed categories remain available, later categories are unavailable, and axe runs last.
 - The check uses a 120-second internal budget inside its 125-second runner timeout. Completed findings survive budget exhaustion, which adds a coverage-limited skip and marks the report incomplete. Context and browser cleanup share bounded headroom inside the runner timeout, and cleanup failure marks the result incomplete.
@@ -284,22 +307,34 @@ The MVP uses:
 - Exact citations limited to evidence supplied in the request.
 - Repository and target-secret redaction, plus input-size limits, before evidence transmission.
 - Deterministic validation and mapping into Sentinel results. A valid AI finding can warn or fail but can never pass.
+- A two-outcome contract: a supported `gap` warns or fails, while
+  `no_supported_gap` produces an informational skip without inventing a
+  finding.
 - Fail-closed handling: malformed, unknown, refused, truncated, oversized, schema-invalid, or otherwise unrecognized output becomes `Skipped / Info` and marks the scan incomplete.
 - No multi-turn workflow, provider registry, or elaborate retry system.
 
 The selected provider credential may be sent only as an authentication header to that provider. Real credential values must never enter prompts, request bodies, response evidence, reports, logs, tests, or documentation.
 
-The overall report summary remains deterministic. When paid credentials are absent, all deterministic checks run and the AI check is `Skipped / Info`. The committed sample report must demonstrate a real AI-enabled run.
+The overall report summary remains deterministic. When paid credentials are
+absent, all deterministic checks run and the AI check is `Skipped / Info`.
 
-The current feasibility spike is intentionally synthetic: it sends only a fixed, secret-free contract-and-test fixture through the selected provider. It uses process environment variables for enablement, explicit provider selection, and provider-specific credentials. Limits are fixed at 8 KiB of evidence, 512 output tokens, a 64 KiB accepted response body, a 20-second provider timeout, and a 25-second check timeout. Real repository evidence selection and redaction remain part of the later production AI milestone.
+The implemented evidence selector requires an explicitly configured,
+target-contained OpenAPI document. It evaluates at most 12 test candidates,
+reads each candidate within 16 KiB, and selects one readable artifact related
+to contract paths or operation identifiers. Contract plus test evidence is
+limited to 8 KiB and uses target-relative citation paths. Recognized
+private-key, provider-credential, authentication, URL-credential, and
+secret-like assignment patterns are redacted before the request. Missing,
+unsafe, unrelated, unreadable, or oversized evidence produces
+`AI_EVIDENCE_INSUFFICIENT` without consuming the paid-call allowance.
+Provider-authored finding and recommendation text is also rejected before
+reporting if credential content is detected.
 
-The live OpenAI path was manually verified on July 27, 2026. One bounded
-request returned a locally validated `Fail / High` finding for the synthetic
-cross-account authorization-test gap, cited both supplied fixture paths, and
-reported sanitized model and token provenance. The overall scan remained
-complete. Claude transport behavior remains covered by deterministic offline
-tests rather than a recorded live request. This verification does not complete
-production evidence selection, redaction, or the final demo-target report.
+Process environment variables still control enablement, explicit provider
+selection, and provider-specific credentials. Output is fixed at 512 tokens, an
+accepted response body of 64 KiB, a 20-second provider timeout, and a 25-second
+check timeout. Route-source fallback, multiple-test synthesis, and broader
+evidence discovery remain outside the bounded MVP.
 
 ## Testing Strategy
 
@@ -324,7 +359,7 @@ Required unit tests focus on:
 - Safe endpoint selection and shallow response expectations.
 - Exclusive live/static API mode selection, bounded response handling, and per-endpoint latency.
 - Shared Playwright session behavior, browser-unavailable degradation, page observations, axe severity, authentication isolation, horizontal-overflow checks, and every configured form-step variant.
-- AI response and citation validation.
+- AI evidence selection/redaction plus response and dynamic citation validation.
 
 Required integration tests cover:
 
@@ -347,15 +382,17 @@ sample run with explicitly installed Chromium remains mandatory.
 
 1. Build a vertical slice: CLI, minimal config, validated result/summary model, one repository check, and selectable report renderers.
 2. Perform an early AI risk spike using one fixture, explicit OpenAI and Claude adapters, one selected-provider request, and one cited structured result.
-3. Implement configuration, the isolated concurrent runner, redaction, inventory, stack detection, and generic repository checks. Configuration, the runner, inventory, detection, and repository checks are complete; production AI evidence redaction remains pending.
+3. Implement configuration, the isolated concurrent runner, inventory, stack detection, generic repository checks, and bounded target-evidence redaction. This milestone is complete.
 4. Add secret detection and npm-only vulnerability analysis. This milestone is complete.
 5. Add service probes, shallow OpenAPI fallback, and safe API/security runtime checks. This milestone is complete.
 6. Add the shared Playwright Chromium lifecycle and required browser checks. This milestone is complete.
-7. Harden the synthetic AI check behind a provider-neutral, one-call, fail-closed client and preserve no-AI behavior. This milestone is complete; production evidence selection and redaction remain pending.
+7. Harden the AI check behind a provider-neutral, one-call, fail-closed client,
+   replace the feasibility fixture with bounded target evidence, and preserve
+   no-AI behavior. This milestone is complete.
 8. Harden tests, generate the demo report, complete the README, and assemble
-   Cursor evidence. The standalone demo target and scan configuration are
-   complete; the committed report and remaining submission evidence are
-   pending.
+   Cursor evidence. The standalone demo target, final report, documentation,
+   and annotated process-evidence index are complete; an unambiguous
+   Cursor-identifiable capture and final packaging remain.
 9. Attempt stretch work only after all required deliverables pass.
 
 Capture genuine Cursor evidence throughout these milestones rather than reconstructing it at the end.

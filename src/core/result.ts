@@ -116,7 +116,7 @@ function buildOverallSummary(
   const warningLabel = pluralize(statusCounts.Warn, "warning", "warnings");
   const executionNarrative =
     scanStatus === "Incomplete"
-      ? "One or more checks encountered an internal execution error, so the scan is incomplete."
+      ? "One or more checks had incomplete execution or coverage, so review their diagnostic rows before relying on the full scan."
       : "All available checks completed without internal execution errors.";
 
   return overallSummarySchema.parse({

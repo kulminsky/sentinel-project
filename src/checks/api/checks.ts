@@ -277,6 +277,10 @@ async function observeEndpoint(
     }, timeoutMs);
   });
   const requestPromise = Promise.resolve().then(async () => {
+    if (signal.aborted || controller.signal.aborted) {
+      throw new ApiRequestTimeoutError();
+    }
+
     const api = context.config.api!;
     const response = await context.fetch(new URL(endpoint.path, api.baseUrl), {
       method: endpoint.method,

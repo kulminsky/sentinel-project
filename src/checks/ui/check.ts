@@ -779,13 +779,7 @@ export function createUiBrowserCheck(
 
       return execution(
         results,
-        outcome.budgetExceeded ||
-          outcome.internalObservationFailure ||
-          outcome.pageObservations.some(
-            (observation) =>
-              observation.accessibility.state === "available" &&
-              observation.accessibility.value.incomplete.length > 0,
-          ),
+        outcome.budgetExceeded || outcome.internalObservationFailure,
       );
     },
   };

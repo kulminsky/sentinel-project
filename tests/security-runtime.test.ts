@@ -7,6 +7,7 @@ import { test } from "vitest";
 import { disabledAiSetup } from "../src/ai/config.js";
 import { checkDebugEndpoints } from "../src/checks/security/debug-endpoints.js";
 import { checkSecurityHeaders } from "../src/checks/security/headers.js";
+import { observeReadOnlyTarget } from "../src/checks/security/runtime.js";
 import { CHECKS } from "../src/checks/registry.js";
 import { createSentinelConfigSchema } from "../src/config/schema.js";
 import type {
@@ -130,7 +131,7 @@ function secureHeaders(kind: "api" | "ui"): Record<string, string> {
       kind === "ui"
         ? "default-src 'self'; frame-ancestors 'none'"
         : "default-src 'none'",
-    "permissions-policy": "geolocation=()",
+    "permissions-policy": "camera=(), geolocation=(), microphone=()",
     "referrer-policy": "no-referrer",
     "strict-transport-security": "max-age=31536000",
     "x-content-type-options": "nosniff",
@@ -335,6 +336,142 @@ test("non-enforcing CSP and disabled HSTS do not earn header passes", async () =
     assert.equal(ui?.status, "Warn");
     assert.match(ui?.evidence?.join(" ") ?? "", /Content-Security-Policy/);
     assert.match(ui?.evidence?.join(" ") ?? "", /Strict-Transport-Security/);
+  });
+});
+
+test("materially weak header policies warn instead of earning a baseline pass", async () => {
+  await withTemporaryRepository(async (root) => {
+    const fetch: FetchLike = (input) => {
+      const target =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.href
+            : input.url;
+      const headers = secureHeaders(
+        target.includes("ui.example.test") ? "ui" : "api",
+      );
+      headers["strict-transport-security"] = "max-age=1";
+
+      if (target.includes("ui.example.test")) {
+        headers["content-security-policy"] = "default-src *";
+        headers["permissions-policy"] = "*";
+        headers["referrer-policy"] = "unsafe-url";
+        headers["x-frame-options"] = "DENY";
+      }
+
+      return Promise.resolve(new Response(null, { status: 200, headers }));
+    };
+    const execution = await checkSecurityHeaders(
+      await scanContext(root, fetch, {
+        apiEndpoints: [endpoint("catalog", "/catalog")],
+      }),
+      new AbortController().signal,
+    );
+    const api = execution.results.find(
+      (result) => result.subject === "API response headers",
+    );
+    const ui = execution.results.find(
+      (result) => result.subject === "UI response headers",
+    );
+
+    assert.equal(api?.status, "Warn");
+    assert.match(
+      api?.evidence?.join(" ") ?? "",
+      /Weak or unverified Strict-Transport-Security/,
+    );
+    assert.equal(ui?.status, "Warn");
+    assert.match(ui?.finding ?? "", /strength Sentinel could not verify/);
+    assert.match(
+      ui?.evidence?.join(" ") ?? "",
+      /Weak or unverified Content-Security-Policy/,
+    );
+    assert.match(
+      ui?.evidence?.join(" ") ?? "",
+      /Weak or unverified Referrer-Policy/,
+    );
+    assert.match(
+      ui?.evidence?.join(" ") ?? "",
+      /Weak or unverified Permissions-Policy/,
+    );
+  });
+});
+
+test("unverifiable CSP, frame, and permissions policies cannot earn a pass", async () => {
+  const cases = [
+    {
+      header: "content-security-policy",
+      value: "default-src 'self'; prefetch-src *",
+      evidence: /Content-Security-Policy/,
+    },
+    {
+      header: "content-security-policy",
+      value: "default-src 'self'; frame-ancestors 'strict-dynamic'",
+      evidence: /frame protection/,
+    },
+    {
+      header: "permissions-policy",
+      value: "invented-feature=()",
+      evidence: /Permissions-Policy/,
+    },
+    {
+      header: "permissions-policy",
+      value: "geolocation=()",
+      evidence: /Permissions-Policy/,
+    },
+  ] as const;
+
+  for (const testCase of cases) {
+    await withTemporaryRepository(async (root) => {
+      const fetch: FetchLike = (input) => {
+        const target =
+          typeof input === "string"
+            ? input
+            : input instanceof URL
+              ? input.href
+              : input.url;
+        const headers = secureHeaders(
+          target.includes("ui.example.test") ? "ui" : "api",
+        );
+        if (target.includes("ui.example.test")) {
+          headers[testCase.header] = testCase.value;
+        }
+        return Promise.resolve(new Response(null, { status: 200, headers }));
+      };
+      const execution = await checkSecurityHeaders(
+        await scanContext(root, fetch),
+        new AbortController().signal,
+      );
+      const ui = execution.results.find(
+        (result) => result.subject === "UI response headers",
+      );
+
+      assert.equal(ui?.status, "Warn");
+      assert.match(ui?.evidence?.join(" ") ?? "", testCase.evidence);
+    });
+  }
+});
+
+test("a pre-aborted Security observation never starts an HTTP request", async () => {
+  const controller = new AbortController();
+  controller.abort();
+  let requests = 0;
+
+  const observation = await observeReadOnlyTarget({
+    fetch: () => {
+      requests += 1;
+      return Promise.resolve(new Response(null, { status: 200 }));
+    },
+    method: "GET",
+    signal: controller.signal,
+    timeoutMs: 100,
+    url: new URL("https://ui.example.test/"),
+  });
+
+  assert.equal(requests, 0);
+  assert.deepEqual(observation, {
+    state: "unavailable",
+    reason: "timeout",
   });
 });
 

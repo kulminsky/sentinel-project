@@ -1,4 +1,4 @@
-import { syntheticAiCheck } from "../ai/check.js";
+import { targetAiCheck } from "../ai/check.js";
 import type { Check } from "../core/check.js";
 import {
   apiRuntimeContractCheck,
@@ -44,7 +44,7 @@ export const CHECKS: readonly Check[] = [
   apiAvailabilityCheck,
   apiRuntimeContractCheck,
   apiStaticOpenApiCheck,
-  syntheticAiCheck,
+  targetAiCheck,
   uiAvailabilityCheck,
   uiBrowserCheck,
 ];

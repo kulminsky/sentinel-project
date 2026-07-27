@@ -11,6 +11,7 @@ import {
 } from "./runtime.js";
 
 const MAX_RUNTIME_TARGETS = 12;
+const MIN_STRONG_HSTS_MAX_AGE_SECONDS = 31_536_000n;
 const CSP_VALUE_DIRECTIVES = new Set([
   "base-uri",
   "child-src",
@@ -32,9 +33,10 @@ const CSP_VALUE_DIRECTIVES = new Set([
   "style-src-elem",
   "worker-src",
 ]);
-const CSP_VALUELESS_DIRECTIVES = new Set([
-  "block-all-mixed-content",
-  "upgrade-insecure-requests",
+const VERIFIED_PERMISSIONS_POLICY_FEATURES = new Set([
+  "camera",
+  "geolocation",
+  "microphone",
 ]);
 
 const HEADER_CHECK: SecurityCheckMetadata = {
@@ -53,6 +55,11 @@ interface HeaderTarget {
 
 interface CompletedHeaderTarget extends HeaderTarget {
   readonly observation: RuntimeObservation;
+}
+
+interface HeaderConcern {
+  readonly header: string;
+  readonly reason: "missing" | "weak";
 }
 
 function deduplicateTargets(targets: readonly HeaderTarget[]): HeaderTarget[] {
@@ -218,34 +225,114 @@ function successfulObservation(
   );
 }
 
-function headerIsNonempty(headers: Headers, name: string): boolean {
-  return (headers.get(name)?.trim().length ?? 0) > 0;
+function parseCspDirectives(
+  policy: string,
+): ReadonlyMap<string, readonly string[]> | undefined {
+  const directives = new Map<string, readonly string[]>();
+
+  for (const segment of policy.split(";")) {
+    const tokens = segment.trim().toLowerCase().split(/\s+/);
+    const name = tokens.shift();
+    if (name === undefined || name.length === 0) {
+      continue;
+    }
+
+    if (!/^[a-z][a-z0-9-]*$/.test(name) || directives.has(name)) {
+      return undefined;
+    }
+
+    directives.set(name, tokens);
+  }
+
+  return directives.size > 0 ? directives : undefined;
 }
 
-function hasEnforcingCsp(headers: Headers): boolean {
+function isBoundedCspSource(source: string): boolean {
+  if (
+    source === "'self'" ||
+    source === "'none'" ||
+    source === "'strict-dynamic'" ||
+    /^'(?:nonce-|sha(?:256|384|512)-)[A-Za-z0-9+/=_-]+'$/.test(source)
+  ) {
+    return true;
+  }
+
+  return /^https?:\/\/[^*/\s]+(?::\d+)?(?:\/[^*\s]*)?$/.test(source);
+}
+
+function isBoundedFrameAncestorSource(source: string): boolean {
+  if (source === "'none'" || source === "'self'") {
+    return true;
+  }
+
+  try {
+    const url = new URL(source);
+    return (
+      (url.protocol === "http:" || url.protocol === "https:") &&
+      url.username.length === 0 &&
+      url.password.length === 0 &&
+      url.pathname === "/" &&
+      url.search.length === 0 &&
+      url.hash.length === 0 &&
+      source.replace(/\/$/, "") === url.origin
+    );
+  } catch {
+    return false;
+  }
+}
+
+function hasValidFrameAncestors(sources: readonly string[]): boolean {
+  return (
+    sources.length > 0 &&
+    sources.every(isBoundedFrameAncestorSource) &&
+    (!sources.includes("'none'") || sources.length === 1)
+  );
+}
+
+function hasVerifiablyRestrictiveCsp(headers: Headers): boolean {
   const policy = headers.get("content-security-policy");
 
   if (policy === null) {
     return false;
   }
 
-  return policy.split(";").some((segment) => {
-    const [name, ...values] = segment.trim().toLowerCase().split(/\s+/);
+  const directives = parseCspDirectives(policy);
+  const defaultSources = directives?.get("default-src");
+  if (
+    directives === undefined ||
+    defaultSources === undefined ||
+    defaultSources.length === 0
+  ) {
+    return false;
+  }
 
-    if (name === undefined || name.length === 0) {
+  for (const [name, sources] of directives) {
+    if (!CSP_VALUE_DIRECTIVES.has(name)) {
       return false;
     }
 
-    return (
-      name === "sandbox" ||
-      (CSP_VALUELESS_DIRECTIVES.has(name) && values.length === 0) ||
-      (CSP_VALUE_DIRECTIVES.has(name) &&
-        values.some((value) => value.length > 0))
-    );
-  });
+    if (
+      sources.length === 0 ||
+      (name === "frame-ancestors" && !hasValidFrameAncestors(sources)) ||
+      (sources.includes("'none'") && sources.length !== 1) ||
+      sources.some(
+        (source) =>
+          source === "*" ||
+          source === "'unsafe-inline'" ||
+          source === "'unsafe-eval'" ||
+          source === "data:" ||
+          source === "blob:" ||
+          !isBoundedCspSource(source),
+      )
+    ) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
-function hasActiveHsts(headers: Headers): boolean {
+function hasStrongHsts(headers: Headers): boolean {
   const policy = headers.get("strict-transport-security");
 
   if (policy === null) {
@@ -267,7 +354,7 @@ function hasActiveHsts(headers: Headers): boolean {
     maxAge = BigInt(match[1]);
   }
 
-  return maxAge !== undefined && maxAge > 0n;
+  return maxAge !== undefined && maxAge >= MIN_STRONG_HSTS_MAX_AGE_SECONDS;
 }
 
 function hasNoSniff(headers: Headers): boolean {
@@ -277,82 +364,200 @@ function hasNoSniff(headers: Headers): boolean {
 }
 
 function hasFrameProtection(headers: Headers): boolean {
-  const policy = headers.get("content-security-policy")?.toLowerCase() ?? "";
+  const policy = headers.get("content-security-policy");
   const frameOptions = headers.get("x-frame-options")?.trim().toLowerCase();
-  const frameAncestors = /(?:^|;)\s*frame-ancestors\s+([^;]+)/
-    .exec(policy)?.[1]
-    ?.trim();
+  const frameAncestors =
+    policy === null
+      ? undefined
+      : parseCspDirectives(policy)?.get("frame-ancestors");
+
+  if (frameAncestors !== undefined) {
+    return hasValidFrameAncestors(frameAncestors);
+  }
+
+  return frameOptions === "deny" || frameOptions === "sameorigin";
+}
+
+function hasSafeReferrerPolicy(headers: Headers): boolean {
+  const policies = headers
+    .get("referrer-policy")
+    ?.split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter((value) => value.length > 0);
+  const selected = policies?.at(-1);
 
   return (
-    (frameAncestors !== undefined && frameAncestors !== "*") ||
-    frameOptions === "deny" ||
-    frameOptions === "sameorigin"
+    selected === "no-referrer" ||
+    selected === "same-origin" ||
+    selected === "strict-origin" ||
+    selected === "strict-origin-when-cross-origin"
   );
 }
 
-function missingApiHeaders(target: CompletedHeaderTarget): string[] {
-  if (!successfulObservation(target)) {
-    return [];
+function hasRestrictivePermissionsPolicy(headers: Headers): boolean {
+  const policy = headers.get("permissions-policy")?.trim();
+  if (policy === undefined || policy.length === 0) {
+    return false;
   }
 
-  const missing = [
-    ...(hasNoSniff(target.observation.headers)
-      ? []
-      : ["X-Content-Type-Options: nosniff"]),
-  ];
+  const directives = policy.split(",").map((value) => value.trim());
+  const restricted = new Set<string>();
 
-  if (
-    target.url.protocol === "https:" &&
-    !hasActiveHsts(target.observation.headers)
-  ) {
-    missing.push("Strict-Transport-Security");
+  for (const directive of directives) {
+    const match = /^([a-z][a-z0-9-]*)=\(\)$/i.exec(directive);
+    const feature = match?.[1]?.toLowerCase();
+    if (
+      feature === undefined ||
+      !VERIFIED_PERMISSIONS_POLICY_FEATURES.has(feature) ||
+      restricted.has(feature)
+    ) {
+      return false;
+    }
+    restricted.add(feature);
   }
 
-  return missing;
+  return [...VERIFIED_PERMISSIONS_POLICY_FEATURES].every((feature) =>
+    restricted.has(feature),
+  );
 }
 
-function missingUiHeaders(target: CompletedHeaderTarget): string[] {
+function headerConcern(
+  headers: Headers,
+  name: string,
+  valid: boolean,
+  label = name,
+): HeaderConcern | undefined {
+  const value = headers.get(name);
+
+  if (value === null || value.trim().length === 0) {
+    return { header: label, reason: "missing" };
+  }
+
+  return valid ? undefined : { header: label, reason: "weak" };
+}
+
+function frameProtectionConcern(headers: Headers): HeaderConcern | undefined {
+  if (hasFrameProtection(headers)) {
+    return undefined;
+  }
+
+  const cspPresent =
+    (headers.get("content-security-policy")?.trim().length ?? 0) > 0;
+  const frameOptionsPresent =
+    (headers.get("x-frame-options")?.trim().length ?? 0) > 0;
+
+  return {
+    header: "frame protection",
+    reason: cspPresent || frameOptionsPresent ? "weak" : "missing",
+  };
+}
+
+function missingApiHeaders(target: CompletedHeaderTarget): HeaderConcern[] {
   if (!successfulObservation(target)) {
     return [];
   }
 
   const headers = target.observation.headers;
-  const missing = [
-    ...(hasEnforcingCsp(headers) ? [] : ["Content-Security-Policy"]),
-    ...(hasFrameProtection(headers) ? [] : ["frame protection"]),
-    ...(hasNoSniff(headers) ? [] : ["X-Content-Type-Options: nosniff"]),
-    ...(headerIsNonempty(headers, "referrer-policy")
-      ? []
-      : ["Referrer-Policy"]),
-    ...(headerIsNonempty(headers, "permissions-policy")
-      ? []
-      : ["Permissions-Policy"]),
-  ];
+  const concerns = [
+    headerConcern(
+      headers,
+      "x-content-type-options",
+      hasNoSniff(headers),
+      "X-Content-Type-Options: nosniff",
+    ),
+  ].filter((value): value is HeaderConcern => value !== undefined);
 
-  if (target.url.protocol === "https:" && !hasActiveHsts(headers)) {
-    missing.push("Strict-Transport-Security");
+  if (target.url.protocol === "https:" && !hasStrongHsts(headers)) {
+    const concern = headerConcern(
+      headers,
+      "strict-transport-security",
+      false,
+      "Strict-Transport-Security",
+    );
+    if (concern !== undefined) {
+      concerns.push(concern);
+    }
   }
 
-  return missing;
+  return concerns;
+}
+
+function missingUiHeaders(target: CompletedHeaderTarget): HeaderConcern[] {
+  if (!successfulObservation(target)) {
+    return [];
+  }
+
+  const headers = target.observation.headers;
+  const concerns = [
+    headerConcern(
+      headers,
+      "content-security-policy",
+      hasVerifiablyRestrictiveCsp(headers),
+      "Content-Security-Policy",
+    ),
+    frameProtectionConcern(headers),
+    headerConcern(
+      headers,
+      "x-content-type-options",
+      hasNoSniff(headers),
+      "X-Content-Type-Options: nosniff",
+    ),
+    headerConcern(
+      headers,
+      "referrer-policy",
+      hasSafeReferrerPolicy(headers),
+      "Referrer-Policy",
+    ),
+    headerConcern(
+      headers,
+      "permissions-policy",
+      hasRestrictivePermissionsPolicy(headers),
+      "Permissions-Policy",
+    ),
+  ].filter((value): value is HeaderConcern => value !== undefined);
+
+  if (target.url.protocol === "https:" && !hasStrongHsts(headers)) {
+    const concern = headerConcern(
+      headers,
+      "strict-transport-security",
+      false,
+      "Strict-Transport-Security",
+    );
+    if (concern !== undefined) {
+      concerns.push(concern);
+    }
+  }
+
+  return concerns;
 }
 
 function baselineResult(
   kind: "API" | "UI",
   targets: readonly CompletedHeaderTarget[],
 ) {
-  const missing = new Map<string, string[]>();
+  const concerns = new Map<
+    string,
+    { concern: HeaderConcern; paths: string[] }
+  >();
 
   for (const target of targets) {
-    const missingForTarget =
+    const targetConcerns =
       kind === "API" ? missingApiHeaders(target) : missingUiHeaders(target);
-    for (const header of missingForTarget) {
-      const paths = missing.get(header) ?? [];
-      paths.push(`${target.method} ${target.path}`);
-      missing.set(header, paths);
+    for (const concern of targetConcerns) {
+      const key = `${concern.reason}:${concern.header}`;
+      const existing = concerns.get(key);
+      if (existing === undefined) {
+        concerns.set(key, {
+          concern,
+          paths: [`${target.method} ${target.path}`],
+        });
+      } else {
+        existing.paths.push(`${target.method} ${target.path}`);
+      }
     }
   }
 
-  if (missing.size === 0) {
+  if (concerns.size === 0) {
     return createSecurityResult(HEADER_CHECK, {
       subject: `${kind} response headers`,
       status: "Pass",
@@ -368,11 +573,12 @@ function baselineResult(
     subject: `${kind} response headers`,
     status: "Warn",
     severity: kind === "UI" ? "Medium" : "Low",
-    finding: `Observed ${kind} responses are missing one or more baseline security headers.`,
+    finding: `Observed ${kind} responses are missing baseline headers or use policies whose strength Sentinel could not verify.`,
     recommendation:
-      "Set the missing headers centrally and verify them on every public response.",
-    evidence: [...missing.entries()].map(
-      ([header, paths]) => `Missing ${header}: ${paths.join(", ")}`,
+      "Set restrictive header policies centrally and verify them on every public response.",
+    evidence: [...concerns.values()].map(
+      ({ concern, paths }) =>
+        `${concern.reason === "missing" ? "Missing" : "Weak or unverified"} ${concern.header}: ${paths.join(", ")}`,
     ),
   });
 }

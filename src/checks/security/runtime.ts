@@ -29,6 +29,13 @@ export async function observeReadOnlyTarget(options: {
   readonly timeoutMs: number;
   readonly url: URL;
 }): Promise<RuntimeObservation> {
+  if (options.signal.aborted) {
+    return {
+      state: "unavailable",
+      reason: "timeout",
+    };
+  }
+
   const controller = new AbortController();
   const abortFromParent = () => controller.abort();
   options.signal.addEventListener("abort", abortFromParent, { once: true });

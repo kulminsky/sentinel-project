@@ -38,12 +38,6 @@ interface SecretDetector {
 
 const SECRET_DETECTORS: readonly SecretDetector[] = [
   {
-    category: "Private key",
-    severity: "Critical",
-    pattern:
-      /-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----|-----BEGIN PGP PRIVATE KEY BLOCK-----/,
-  },
-  {
     category: "Anthropic API credential",
     severity: "High",
     pattern: /\bsk-ant-[A-Za-z0-9_-]{20,}\b/,
@@ -80,6 +74,10 @@ const SECRET_DETECTORS: readonly SecretDetector[] = [
   },
 ];
 
+const PRIVATE_KEY_BEGIN_PATTERN =
+  /-----BEGIN ((?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY|PGP PRIVATE KEY BLOCK)-----/g;
+const MIN_PRIVATE_KEY_MATERIAL_CHARACTERS = 64;
+
 const SECRET_ENVIRONMENT_NAME =
   /(?:^|_)(?:ACCESS_KEY|API_KEY|CLIENT_SECRET|CREDENTIAL|PASSWORD|PASSWD|PRIVATE_KEY|SECRET|TOKEN)(?:_|$)/i;
 
@@ -88,6 +86,84 @@ interface SecretFinding {
   readonly category: string;
   readonly severity: "Critical" | "High";
   readonly lines: number[];
+}
+
+function lineNumberAt(content: string, index: number): number {
+  let line = 1;
+
+  for (let cursor = 0; cursor < index; cursor += 1) {
+    if (content.charCodeAt(cursor) === 10) {
+      line += 1;
+    }
+  }
+
+  return line;
+}
+
+function hasPlausiblePrivateKeyMaterial(body: string): boolean {
+  let materialCharacters = 0;
+  let metadataAllowed = true;
+  let sawContent = false;
+
+  for (const rawLine of body.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (line.length === 0) {
+      if (sawContent) {
+        metadataAllowed = false;
+      }
+      continue;
+    }
+
+    if (metadataAllowed && /^[A-Za-z][A-Za-z-]*:\s*[^\r\n]+$/.test(line)) {
+      sawContent = true;
+      continue;
+    }
+
+    metadataAllowed = false;
+    if (/^=[A-Za-z0-9+/]{4}$/.test(line)) {
+      continue;
+    }
+
+    if (!/^[A-Za-z0-9+/]{16,}={0,2}$/.test(line)) {
+      return false;
+    }
+
+    materialCharacters += line.replace(/=/g, "").length;
+    sawContent = true;
+  }
+
+  return materialCharacters >= MIN_PRIVATE_KEY_MATERIAL_CHARACTERS;
+}
+
+function privateKeyLines(content: string): number[] {
+  const lines: number[] = [];
+
+  for (const match of content.matchAll(PRIVATE_KEY_BEGIN_PATTERN)) {
+    const label = match[1];
+    const start = match.index;
+    if (label === undefined || start === undefined) {
+      continue;
+    }
+
+    const bodyStart = start + match[0].length;
+    const endMarker = `-----END ${label}-----`;
+    const end = content.indexOf(endMarker, bodyStart);
+    if (end === -1) {
+      continue;
+    }
+
+    const body = content.slice(bodyStart, end);
+    if (!hasPlausiblePrivateKeyMaterial(body)) {
+      continue;
+    }
+
+    lines.push(lineNumberAt(content, start));
+    if (lines.length >= MAX_LINES_PER_FINDING) {
+      break;
+    }
+  }
+
+  return lines;
 }
 
 function normalizedEnvironmentValue(value: string): string {
@@ -187,6 +263,14 @@ function collectFileFindings(path: string, content: string): SecretFinding[] {
       }
     }
   });
+
+  const keyLines = privateKeyLines(content);
+  if (keyLines.length > 0) {
+    linesByCategory.set("Private key", {
+      severity: "Critical",
+      lines: keyLines,
+    });
+  }
 
   return [...linesByCategory.entries()].map(
     ([category, { severity, lines }]) => ({

@@ -92,7 +92,7 @@ test("createScanReport produces the incomplete narrative variant", () => {
   assert.equal(report.overallSummary.scanStatus, "Incomplete");
   assert.match(
     report.overallSummary.narrative,
-    /internal execution error, so the scan is incomplete\.$/,
+    /incomplete execution or coverage.+diagnostic rows/,
   );
 });
 

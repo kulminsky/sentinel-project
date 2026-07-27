@@ -24,8 +24,13 @@ async function withTemporaryRepository(
 
 test("secret scan detects supported high-confidence signatures without disclosing values", async () => {
   await withTemporaryRepository(async (root) => {
-    const canaries = [
+    const privateKey = [
       ["-----BEGIN ", "PRIVATE KEY-----"].join(""),
+      "A".repeat(64),
+      ["-----END ", "PRIVATE KEY-----"].join(""),
+    ].join("\n");
+    const canaries = [
+      privateKey,
       ["AKIA", "1234567890ABCDEF"].join(""),
       ["ghp_", "A".repeat(30)].join(""),
       ["xoxb-", "A".repeat(20)].join(""),
@@ -76,6 +81,51 @@ test("secret scan detects supported high-confidence signatures without disclosin
       assert.equal(JSON.stringify(execution).includes(canary), false);
       assert.equal(rendered.includes(canary), false);
     }
+  });
+});
+
+test("secret scan ignores detector definitions and incomplete private-key fragments", async () => {
+  await withTemporaryRepository(async (root) => {
+    const incompleteHeader = ["-----BEGIN ", "PRIVATE KEY-----"].join("");
+    const incompleteBlock = [
+      ["-----BEGIN RSA ", "PRIVATE KEY-----"].join(""),
+      "A".repeat(64),
+    ].join("\n");
+    const implausiblyShortBlock = [
+      ["-----BEGIN EC ", "PRIVATE KEY-----"].join(""),
+      "AAAA",
+      ["-----END EC ", "PRIVATE KEY-----"].join(""),
+    ].join("\n");
+    const detectorDefinition = [
+      "const detector = /-----BEGIN (?:RSA |EC |DSA |OPENSSH )?",
+      "PRIVATE KEY-----/;",
+    ].join("");
+
+    await writeFile(
+      join(root, "detector.ts"),
+      [
+        detectorDefinition,
+        incompleteHeader,
+        incompleteBlock,
+        implausiblyShortBlock,
+      ].join("\n"),
+      "utf8",
+    );
+
+    const execution = await checkSecrets(
+      await inspectRepository(root),
+      new AbortController().signal,
+    );
+
+    assert.equal(execution.incomplete, false);
+    assert.equal(execution.results.length, 1);
+    assert.equal(execution.results[0]?.status, "Pass");
+    assert.equal(
+      execution.results.some((result) =>
+        result.evidence?.some((entry) => entry.includes("Private key")),
+      ),
+      false,
+    );
   });
 });
 
@@ -152,7 +202,11 @@ test("secret scan preserves findings and marks bounded coverage incomplete", asy
 
 test("secret scan preserves findings when its internal time budget is exhausted", async () => {
   await withTemporaryRepository(async (root) => {
-    const canary = ["-----BEGIN ", "PRIVATE KEY-----"].join("");
+    const canary = [
+      ["-----BEGIN ", "PRIVATE KEY-----"].join(""),
+      "A".repeat(64),
+      ["-----END ", "PRIVATE KEY-----"].join(""),
+    ].join("\n");
     await writeFile(join(root, "a.txt"), canary, "utf8");
     await writeFile(join(root, "b.txt"), "remaining content", "utf8");
     const times = [0, 0, 8_000];

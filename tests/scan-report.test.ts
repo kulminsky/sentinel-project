@@ -44,6 +44,50 @@ function configForTarget(targetRoot: string) {
   });
 }
 
+function configForAiTarget(targetRoot: string) {
+  return createSentinelConfigSchema(targetRoot).parse({
+    target: {
+      root: targetRoot,
+    },
+    api: {
+      baseUrl: "http://127.0.0.1:4321",
+      healthPath: "/health",
+      openApiPath: "./openapi.json",
+      timeoutMs: 1_000,
+      latencyThresholdMs: 500,
+      endpoints: [],
+    },
+  });
+}
+
+async function writeAiEvidence(targetRoot: string): Promise<void> {
+  await writeFile(
+    join(targetRoot, "openapi.json"),
+    JSON.stringify({
+      openapi: "3.1.0",
+      info: { title: "Fixture API", version: "1" },
+      paths: {
+        "/accounts/{accountId}/export": {
+          get: {
+            operationId: "exportAccount",
+            responses: {
+              403: {
+                description: "Cross-account access denied.",
+              },
+            },
+          },
+        },
+      },
+    }),
+    "utf8",
+  );
+  await writeFile(
+    join(targetRoot, "account-export.test.ts"),
+    'test("owner export", async () => exportAccount("own"));\n',
+    "utf8",
+  );
+}
+
 test("scanProject emits deterministic repository and coverage rows", async () => {
   await withTemporaryRepository(async (targetRoot) => {
     await writeFile(join(targetRoot, "README.md"), GOOD_README, "utf8");
@@ -125,26 +169,26 @@ test("renderMarkdownReport includes the required result fields and summary", asy
 test("scanProject appends one valid AI result without affecting repository checks", async () => {
   await withTemporaryRepository(async (targetRoot) => {
     await writeFile(join(targetRoot, "README.md"), GOOD_README, "utf8");
+    await writeAiEvidence(targetRoot);
     const fake = createFakeStructuredAiClient({
       state: "available",
       value: {
+        outcome: "gap",
         severity: "High",
         finding:
           "The tests omit the authenticated cross-account export rejection.",
         recommendation: "Add the missing authorization test.",
-        citations: [
-          "synthetic/api/account-export-contract.md",
-          "synthetic/tests/account-export.test.md",
-        ],
+        citations: ["openapi.json", "account-export.test.ts"],
       },
       provenanceEvidence: ["Provider: openai; model: deterministic-fake"],
     });
 
-    const report = await scanProject(configForTarget(targetRoot), {
+    const report = await scanProject(configForAiTarget(targetRoot), {
       ai: {
         kind: "ready",
         createClient: () => fake.client,
       },
+      fetch: () => Promise.resolve(new Response(null, { status: 503 })),
     });
 
     assert.equal(report.overallSummary.scanStatus, "Complete");
@@ -164,6 +208,7 @@ test("scanProject appends one valid AI result without affecting repository check
 test("provider credentials never appear in normalized or rendered output", async () => {
   await withTemporaryRepository(async (targetRoot) => {
     await writeFile(join(targetRoot, "README.md"), GOOD_README, "utf8");
+    await writeAiEvidence(targetRoot);
     const credential = randomUUID();
     const ai = resolveAiSetup(
       {
@@ -180,14 +225,12 @@ test("provider credentials never appear in normalized or rendered output", async
                   finish_reason: "stop",
                   message: {
                     content: JSON.stringify({
+                      outcome: "gap",
                       severity: "High",
                       finding:
                         "The tests omit the authenticated cross-account export rejection.",
                       recommendation: "Add the missing authorization test.",
-                      citations: [
-                        "synthetic/api/account-export-contract.md",
-                        "synthetic/tests/account-export.test.md",
-                      ],
+                      citations: ["openapi.json", "account-export.test.ts"],
                     }),
                   },
                 },
@@ -207,7 +250,10 @@ test("provider credentials never appear in normalized or rendered output", async
         ),
     );
 
-    const report = await scanProject(configForTarget(targetRoot), { ai });
+    const report = await scanProject(configForAiTarget(targetRoot), {
+      ai,
+      fetch: () => Promise.resolve(new Response(null, { status: 503 })),
+    });
     const markdown = renderMarkdownReport(report);
 
     assert.equal(JSON.stringify(report).includes(credential), false);
@@ -218,16 +264,18 @@ test("provider credentials never appear in normalized or rendered output", async
 test("an AI execution failure leaves repository results intact and marks the scan incomplete", async () => {
   await withTemporaryRepository(async (targetRoot) => {
     await writeFile(join(targetRoot, "README.md"), GOOD_README, "utf8");
+    await writeAiEvidence(targetRoot);
     const fake = createFakeStructuredAiClient({
       state: "unavailable",
       diagnosticCode: "AI_PROVIDER_ERROR",
     });
 
-    const report = await scanProject(configForTarget(targetRoot), {
+    const report = await scanProject(configForAiTarget(targetRoot), {
       ai: {
         kind: "ready",
         createClient: () => fake.client,
       },
+      fetch: () => Promise.resolve(new Response(null, { status: 503 })),
     });
 
     assert.equal(report.overallSummary.scanStatus, "Incomplete");

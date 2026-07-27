@@ -486,7 +486,7 @@ test("indeterminate axe results are preserved and never earn an accessibility pa
   assert.deepEqual(accessibilityResult?.evidence, [
     "Indeterminate rule: color-contrast; affected nodes: 2",
   ]);
-  assert.equal(execution.incomplete, true);
+  assert.equal(execution.incomplete, false);
 });
 
 test("navigation, page errors, accessibility impact, and overflow map to bounded findings", async () => {
