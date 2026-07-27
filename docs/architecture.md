@@ -125,6 +125,38 @@ Use a fixed list of plain check functions. External capabilities are passed only
 - One symlink-safe repository inventory supports generic, Node/npm, and TypeScript checks without retaining whole-repository contents.
 - The Playwright Chromium boundary and axe integration are implemented; compatible browser binaries remain an explicit runtime installation and are not downloaded during `npm install`.
 
+### Optional Docker packaging
+
+Docker is an external packaging and demo-orchestration layer, not a scan
+module. One multi-stage Dockerfile produces two isolated final images. The
+Sentinel target installs the locked root project, compiles its current
+TypeScript entry point, and adds Playwright Chromium plus its Linux
+dependencies. The sample target installs only sample production dependencies
+and copies its compiled server and static assets. The intentionally vulnerable
+sample dependency is therefore absent from the Sentinel image. The host
+`npm install` and `npm start` workflow remains authoritative and unchanged.
+
+The Sentinel image retains root development dependencies because implemented
+repository checks import TypeScript at runtime. The sample image runs as the
+non-root Node user and contains neither Sentinel nor browser binaries. Changing
+the root package dependency classification is outside this packaging boundary.
+
+The optional Compose workflow starts the trusted bundled sample, waits for its
+configured health endpoint, invokes the existing CLI with the existing sample
+configuration and container-network URL overrides, prints a temporary report,
+and stops the sample when the scanner exits. This explicit reviewer command
+does not give Sentinel service-lifecycle responsibility: normal scans still
+never start, stop, discover, or restart targets. Other repositories can be
+mounted read-only and scanned directly without Compose.
+
+Docker build context excludes `.env`, npm-auth, common private-key, and
+certificate-bundle files along with dependency directories, generated reports,
+Git data, and development evidence. Provider credentials are never accepted at
+build time; optional runtime pass-through retains the existing environment-only
+provider boundary and its documented Docker-administrator visibility
+limitation. The container is a local development and review convenience, not a
+hardened sandbox for hostile sites.
+
 ## Setup and Concurrent Execution Flow
 
 Sentinel validates the readable target, builds the shared repository inventory, detects root Node/npm and TypeScript context, and prepares the shared scan context before check execution.

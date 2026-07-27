@@ -52,6 +52,25 @@ The app listens on `http://127.0.0.1:4310` by default. Stop it with `Ctrl+C` in
 terminal 1 after the scan. WSL follows the Linux instructions; native Windows
 uses PowerShell.
 
+### Optional one-command Docker demo
+
+From the Sentinel repository root, Docker users can build the images, start this
+sample on a private Compose network, wait for health, run Sentinel with the
+scanner image's Chromium installation, print the report, and stop the sample:
+
+```text
+docker compose up --build --exit-code-from sentinel --attach sentinel --no-log-prefix
+```
+
+Compose builds separate `sentinel:local` and `sentinel-sample-app:local`
+images. The sample's deliberately vulnerable dependency remains confined to
+the sample image; the scanner image owns Chromium and contains no sample
+package. This optional path requires Docker with Compose but not host Node.js,
+sample-app dependencies, or a host Chromium installation. It does not publish
+the sample port or create a host report. Remove stopped containers afterward
+with `docker compose down --remove-orphans`. The npm workflow remains the
+primary development path.
+
 The scan writes the ignored local file `sample-app/sentinel-report.md`; the
 reviewable generated artifact is
 [`docs/sample-report.md`](../docs/sample-report.md). Sentinel does not start or

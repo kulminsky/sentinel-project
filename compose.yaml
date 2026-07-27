@@ -1,0 +1,51 @@
+services:
+  sample-app:
+    image: sentinel-sample-app:local
+    build:
+      context: .
+      target: sample-app
+    init: true
+    stop_grace_period: 2s
+    environment:
+      SENTINEL_SAMPLE_HOST: 0.0.0.0
+    expose:
+      - "4310"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:4310/health').then((response) => { if (!response.ok) process.exit(1); }).catch(() => process.exit(1));",
+        ]
+      interval: 1s
+      timeout: 2s
+      retries: 30
+      start_period: 2s
+
+  sentinel:
+    image: sentinel:local
+    build:
+      context: .
+      target: sentinel
+    init: true
+    ipc: host
+    depends_on:
+      sample-app:
+        condition: service_healthy
+    working_dir: /workspace
+    volumes:
+      - ./sample-app:/workspace:ro
+    environment:
+      - SENTINEL_API_BASE_URL=http://sample-app:4310
+      - SENTINEL_UI_BASE_URL=http://sample-app:4310
+      - SENTINEL_REPORT_PATH=/tmp/sentinel-report.md
+      - SENTINEL_AI_ENABLED
+      - SENTINEL_AI_PROVIDER
+      - OPENAI_API_KEY
+      - ANTHROPIC_API_KEY
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        node /app/dist/src/cli.js --config /workspace/sentinel.config.json &&
+        cat /tmp/sentinel-report.md

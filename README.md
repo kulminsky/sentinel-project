@@ -197,6 +197,154 @@ findings. The Playwright scan reports the deliberate console error, broken
 image, and axe-detected unlabeled input. See
 [`sample-app/README.md`](sample-app/README.md) for the fixture contract.
 
+## Optional Docker Workflow
+
+The npm workflow above remains the primary setup. Docker is an optional local
+convenience for reviewers who want isolated Sentinel and sample images plus
+Chromium and its Linux system dependencies.
+
+Prerequisites:
+
+- Docker Desktop, or Docker Engine with the Compose plugin.
+- Linux-container mode when using Docker Desktop.
+
+Confirm the Docker client and daemon before continuing:
+
+```text
+docker version
+docker compose version
+```
+
+The first build needs network access for locked npm packages, Chromium, and its
+system dependencies. It does not alter the host npm installation and does not
+make `npm install` download a browser.
+
+One multi-stage Dockerfile produces two final images:
+
+- `sentinel:local` contains Sentinel and Chromium, but no sample source,
+  package, or deliberately vulnerable `lodash`.
+- `sentinel-sample-app:local` contains the sample's production dependencies and
+  compiled assets, but no Sentinel code or browser installation.
+
+The Sentinel image currently retains its locked development dependencies
+because repository checks import TypeScript at runtime. Correcting that package
+boundary is separate from this optional packaging workflow.
+
+### Run the complete sample
+
+From the Sentinel repository root, use the same command in Linux/WSL Bash or
+native Windows PowerShell:
+
+```text
+docker compose up --build --exit-code-from sentinel --attach sentinel --no-log-prefix
+```
+
+Compose builds both isolated local images, starts the sample on its private
+network, waits for `/health`, runs the configured API, Security, and Playwright
+observations, prints the temporary Markdown report, stops the sample, and
+returns Sentinel's fatal-error exit code. It does not publish the sample port
+to the host or create a host report. With AI environment variables absent, AI
+remains disabled and no provider request is made.
+
+The containers remain available in a stopped state for inspection. Remove them
+and the private network when finished:
+
+```text
+docker compose down --remove-orphans
+```
+
+Compose is not required for ordinary scans; it exists only to coordinate the
+two-process sample demonstration. Sentinel itself still never starts or stops a
+target.
+
+### Scan another local repository
+
+Build the reusable image once from the Sentinel repository:
+
+```text
+docker build --target sentinel --tag sentinel:local .
+```
+
+Then change to the target repository. Linux or WSL Bash:
+
+```bash
+docker run --rm --init --ipc=host \
+  --mount "type=bind,src=${PWD},dst=/workspace,readonly" \
+  -e SENTINEL_TARGET_ROOT=/workspace \
+  -e SENTINEL_REPORT_FORMAT=terminal \
+  sentinel:local
+```
+
+Native Windows PowerShell:
+
+```powershell
+$target = (Get-Location).Path
+docker run --rm --init --ipc=host `
+  --mount "type=bind,src=$target,dst=/workspace,readonly" `
+  -e SENTINEL_TARGET_ROOT=/workspace `
+  -e SENTINEL_REPORT_FORMAT=terminal `
+  sentinel:local
+```
+
+This zero-configuration form mounts the target read-only, does not
+automatically load a conventional target configuration, and writes the full
+report to stdout. API and UI observations require an explicitly selected
+configuration whose service addresses are reachable from the container;
+Sentinel does not guess host-network addresses.
+
+### Enable optional AI in the Docker demo
+
+Never place a provider key in `compose.yaml`, `.env`, a Docker build argument,
+or the command line. Prompt for it, pass only the environment-variable name to
+Compose, and remove it afterward.
+
+Linux or WSL Bash with OpenAI:
+
+```bash
+read -rsp "OpenAI API key: " OPENAI_API_KEY
+printf '\n'
+export OPENAI_API_KEY
+
+SENTINEL_AI_ENABLED=true \
+SENTINEL_AI_PROVIDER=openai \
+docker compose up --build --exit-code-from sentinel \
+  --attach sentinel --no-log-prefix
+
+unset OPENAI_API_KEY
+```
+
+Native Windows PowerShell with OpenAI:
+
+```powershell
+$secureKey = Read-Host "OpenAI API key" -AsSecureString
+$env:OPENAI_API_KEY = [System.Net.NetworkCredential]::new("", $secureKey).Password
+$env:SENTINEL_AI_ENABLED = "true"
+$env:SENTINEL_AI_PROVIDER = "openai"
+
+try {
+  docker compose up --build --exit-code-from sentinel `
+    --attach sentinel --no-log-prefix
+} finally {
+  Remove-Item Env:OPENAI_API_KEY -ErrorAction SilentlyContinue
+  Remove-Item Env:SENTINEL_AI_ENABLED -ErrorAction SilentlyContinue
+  Remove-Item Env:SENTINEL_AI_PROVIDER -ErrorAction SilentlyContinue
+  Remove-Variable secureKey -ErrorAction SilentlyContinue
+}
+```
+
+For Claude, use `ANTHROPIC_API_KEY` and provider `claude`. Runtime pass-through
+prevents the value from entering repository files, shell history, image layers,
+or build logs, but Docker administrators can inspect a running container's
+environment. A stronger Docker-secrets integration would require a
+Docker-specific credential wrapper and is intentionally outside this minimal
+workflow. The AI cost, privacy, evidence-redaction, and one-request limits in
+[AI-Assisted Test-Gap Analysis](#ai-assisted-test-gap-analysis) still apply.
+
+The container is a development and review convenience, not a hardened sandbox
+for hostile websites. The included Compose workflow scans the trusted local
+sample; stronger browser isolation is required before visiting untrusted
+targets.
+
 ## Configuration
 
 No configuration is required for the default static scan. Sentinel uses the invocation directory as its target and writes `sentinel-report.md` there.
@@ -627,8 +775,11 @@ The repository currently contains the foundation implementation and its document
 │   └── ui-browser.test.ts
 ├── .prettierignore
 ├── .prettierrc.json
+├── .dockerignore
 ├── AGENTS.md
+├── Dockerfile
 ├── README.md
+├── compose.yaml
 ├── docs/
 │   ├── architecture.md
 │   ├── configuration.md
@@ -678,5 +829,5 @@ For each milestone:
 | OpenAPI validation is shallow and JSON-focused, without deep `$ref`, mutation, fuzzing, or load testing.               | Complete schema evaluation and active testing require substantially larger correctness and safety boundaries.    | Resolve local `$ref` safely and expand deterministic schema coverage before adding active request generation. |
 | UI coverage is Chromium-only, with no visual regression, cross-browser matrix, or general responsive-adaptation claim. | One mandatory Playwright browser session covers the requested observable failures without inflating runtime.     | Add explicit layout assertions, then a second browser only if target risk justifies the cost.                 |
 | Stack-specific depth is limited to Node/npm and TypeScript.                                                            | The sample and primary assignment implementation use this stack; other projects still receive generic checks.    | Add a stack adapter only after selecting a representative target and authoritative toolchain.                 |
-| Service handling uses configured targets rather than port discovery or lifecycle management.                           | Guessing ports or starting processes would make scans less deterministic and could mutate the reviewer’s system. | Add an explicit external orchestration recipe, not implicit service discovery.                                |
+| Service handling uses configured targets rather than port discovery or lifecycle management.                           | Guessing ports or starting processes would make scans less deterministic and could mutate the reviewer’s system. | Keep orchestration explicit; the optional Compose recipe is limited to the trusted bundled sample.            |
 | Final packaging still needs unmistakably Cursor-identifiable evidence and public-clone verification.                   | Existing evidence is genuine and indexed, but not every capture visibly identifies the editor and repository.    | Capture one clearly identified Cursor session and verify the documented workflow from an anonymous clone.     |
