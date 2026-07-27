@@ -279,6 +279,14 @@ The overall report summary remains deterministic. When paid credentials are abse
 
 The current feasibility spike is intentionally synthetic: it sends only a fixed, secret-free contract-and-test fixture through the selected provider. It uses process environment variables for enablement, explicit provider selection, and provider-specific credentials. Limits are fixed at 8 KiB of evidence, 512 output tokens, a 64 KiB accepted response body, a 20-second provider timeout, and a 25-second check timeout. Real repository evidence selection and redaction remain part of the later production AI milestone.
 
+The live OpenAI path was manually verified on July 27, 2026. One bounded
+request returned a locally validated `Fail / High` finding for the synthetic
+cross-account authorization-test gap, cited both supplied fixture paths, and
+reported sanitized model and token provenance. The overall scan remained
+complete. Claude transport behavior remains covered by deterministic offline
+tests rather than a recorded live request. This verification does not complete
+production evidence selection, redaction, or the final demo-target report.
+
 ## Testing Strategy
 
 Sentinel's automated tests use Vitest. The standalone sample target uses Node's

@@ -26,6 +26,7 @@ Sentinel currently:
 - Runs or gracefully skips one synthetic semantic API test-gap check through a provider-neutral typed client.
 - Supports explicit OpenAI or Claude selection while keeping vendor envelopes out of check logic.
 - Uses native schema-constrained output, validates it locally, and fails closed on every unrecognized response.
+- Has a manually verified live OpenAI synthetic-fixture path; the Claude path remains covered by deterministic offline tests rather than a recorded live call.
 - Produces one configured Markdown, JSON, or plain-text terminal report from a shared runtime-validated model.
 - Includes one normalized Overall Summary with complete status/severity counts and a deterministic narrative.
 - Returns a nonzero exit code only when configuration cannot be loaded, the scan cannot run, or the selected report cannot be rendered or written.
@@ -194,6 +195,20 @@ When AI is enabled, `SENTINEL_AI_PROVIDER` is required and must be `openai` or `
 The check receives only a locally validated typed finding and sanitized provider/model/token provenance. OpenAI and Claude transports own their vendor-native structured-output request and response envelopes. An exact provider switch constructs one client per scan; the client atomically permits one paid request total and one active request at a time. It performs no retries, streaming, batching, provider comparison, or free-text JSON recovery. An AI outcome can be only `Fail`, `Warn`, or `Skipped`; it never produces a `Pass`.
 
 The spike uses fixed models (`gpt-5.6-luna` and `claude-haiku-4-5`), an 8 KiB evidence limit, a 512-token output limit, a 64 KiB response limit, a 20-second provider timeout, and a 25-second check timeout. A failed or malformed request still consumes the one-call allowance. A request against the synthetic fixture is expected to cost well under USD $0.01 at current list prices; Sentinel does not embed provider pricing.
+
+### Verified OpenAI Run
+
+On July 27, 2026, a manual OpenAI-enabled scan completed against the committed
+synthetic fixture. The AI check returned `Fail / High` for the missing
+authenticated cross-account `403` test, cited only the supplied contract and
+test fixture paths, and reported sanitized provenance for `gpt-5.6-luna` with
+238 input tokens and 121 output tokens. The overall scan remained `Complete`,
+confirming that report completeness is independent of finding status.
+
+This verifies one live OpenAI request through the implemented fail-closed
+boundary. It does not verify a live Claude request, production repository
+evidence selection or redaction, or the final demo-target sample report. The
+generated root report remains a local ignored artifact.
 
 ## Architecture Documents
 
@@ -365,7 +380,7 @@ For each milestone:
 - **Core runner — complete:** four concurrent analysis-level groups, sequential per-level checks, per-check timeouts, isolated failures, and deterministic ordering.
 - **Static analysis — in progress:** bounded inventory, Node/TypeScript detection, repository checks, npm audit, high-confidence secret detection, and `.env` hygiene are complete; API fallback remains planned.
 - **Runtime analysis — in progress:** centralized API/UI reachability plus unauthenticated header, CORS, and debug-endpoint observations are complete; API assertions and Playwright checks remain planned.
-- **AI analysis:** provider-neutral, fail-closed synthetic multi-provider execution is complete; production evidence selection and redaction remain planned.
+- **AI analysis:** provider-neutral, fail-closed synthetic multi-provider execution is complete and the OpenAI path has been manually verified; live Claude verification plus production evidence selection and redaction remain planned.
 - **Submission readiness — in progress:** the standalone demo target is complete;
   the final sample report, remaining documentation, and process evidence are
   pending.
