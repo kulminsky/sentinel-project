@@ -1,0 +1,35 @@
+{
+  "name": "sentinel-sample-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A deliberately flawed local target for Sentinel scans.",
+  "type": "module",
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "start": "npm run build && node dist/src/server.js",
+    "test": "npm run build && node --test dist/tests/app.test.js",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "npm run format:check && npm run lint && npm test"
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "dependencies": {
+    "express": "5.2.1",
+    "lodash": "4.17.20"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/express": "5.0.6",
+    "@types/lodash": "4.17.20",
+    "@types/node": "20.19.43",
+    "eslint": "10.8.0",
+    "eslint-config-prettier": "10.1.8",
+    "globals": "17.8.0",
+    "prettier": "3.9.6",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.65.0"
+  }
+}

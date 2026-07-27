@@ -1,0 +1,104 @@
+{
+  "target": {
+    "root": "."
+  },
+  "report": {
+    "format": "markdown",
+    "path": "./sentinel-report.md"
+  },
+  "api": {
+    "baseUrl": "http://127.0.0.1:4310",
+    "healthPath": "/health",
+    "timeoutMs": 2000,
+    "latencyThresholdMs": 250,
+    "endpoints": [
+      {
+        "name": "catalog",
+        "method": "GET",
+        "path": "/api/catalog",
+        "expectedStatus": 200,
+        "expectedContentType": "application/json",
+        "requiredJsonFields": ["count", "items"],
+        "useAuthentication": false
+      },
+      {
+        "name": "profile",
+        "method": "GET",
+        "path": "/api/profile",
+        "expectedStatus": 200,
+        "expectedContentType": "application/json",
+        "requiredJsonFields": ["id", "displayName"],
+        "useAuthentication": false
+      },
+      {
+        "name": "public-feed",
+        "method": "GET",
+        "path": "/api/public-feed",
+        "expectedStatus": 200,
+        "expectedContentType": "application/json",
+        "requiredJsonFields": ["items", "visibility"],
+        "useAuthentication": false
+      },
+      {
+        "name": "slow",
+        "method": "GET",
+        "path": "/api/slow",
+        "expectedStatus": 200,
+        "expectedContentType": "application/json",
+        "requiredJsonFields": ["status"],
+        "useAuthentication": false
+      }
+    ]
+  },
+  "ui": {
+    "baseUrl": "http://127.0.0.1:4310",
+    "timeoutMs": 3000,
+    "pages": [
+      {
+        "name": "home",
+        "path": "/",
+        "useAuthentication": false
+      }
+    ],
+    "viewports": [
+      {
+        "name": "mobile",
+        "width": 390,
+        "height": 844
+      },
+      {
+        "name": "desktop",
+        "width": 1440,
+        "height": 900
+      }
+    ],
+    "formFlows": [
+      {
+        "name": "subscription",
+        "startPath": "/",
+        "useAuthentication": false,
+        "steps": [
+          {
+            "type": "fill",
+            "selector": "#email",
+            "value": {
+              "source": "literal",
+              "value": "reviewer@example.test"
+            }
+          },
+          {
+            "type": "click",
+            "selector": "button[type=\"submit\"]"
+          },
+          {
+            "type": "assertVisibleText",
+            "text": "Thanks for subscribing."
+          }
+        ]
+      }
+    ]
+  },
+  "ai": {
+    "enabled": false
+  }
+}

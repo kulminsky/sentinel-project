@@ -1,0 +1,15 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="48"
+  height="48"
+  viewBox="0 0 48 48"
+  role="img"
+  aria-labelledby="title"
+>
+  <title id="title">Northstar status mark</title>
+  <rect width="48" height="48" rx="14" fill="#4459c7" />
+  <path
+    d="M24 9.5 27.7 20l10.8 4-10.8 4L24 38.5 20.3 28 9.5 24l10.8-4L24 9.5Z"
+    fill="#fff"
+  />
+</svg>

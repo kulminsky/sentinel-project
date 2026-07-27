@@ -8,22 +8,17 @@ import tseslint from "typescript-eslint";
 
 export default defineConfig(
   {
-    ignores: [
-      "dist/**",
-      "node_modules/**",
-      "sample-app/**",
-      "sentinel-report.md",
-    ],
+    ignores: ["dist/**", "node_modules/**", "sentinel-report.md"],
   },
   {
-    files: ["**/*.{js,mjs}"],
+    files: ["**/*.mjs"],
     extends: [js.configs.recommended],
     languageOptions: {
       globals: globals.node,
     },
   },
   {
-    files: ["**/*.ts"],
+    files: ["src/**/*.ts", "tests/**/*.ts"],
     extends: [js.configs.recommended, tseslint.configs.recommendedTypeChecked],
     languageOptions: {
       globals: globals.node,
@@ -31,6 +26,13 @@ export default defineConfig(
         projectService: true,
         tsconfigRootDir: import.meta.dirname,
       },
+    },
+  },
+  {
+    files: ["public/**/*.js"],
+    extends: [js.configs.recommended],
+    languageOptions: {
+      globals: globals.browser,
     },
   },
   prettier,

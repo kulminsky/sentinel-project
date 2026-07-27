@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="A deliberately flawed but functional target for Sentinel scans."
+    />
+    <title>Northstar Service Status</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="Northstar home">
+        <img
+          src="/assets/sentinel-mark.svg"
+          alt="Northstar status mark"
+          width="42"
+          height="42"
+        />
+        <span>Northstar</span>
+      </a>
+      <span class="status-pill">All core systems operational</span>
+    </header>
+
+    <main>
+      <section class="hero" aria-labelledby="page-title">
+        <div>
+          <p class="eyebrow">Service overview</p>
+          <h1 id="page-title">Clear signals for every release</h1>
+          <p class="lede">
+            Track the health of reporting and monitoring from one lightweight
+            dashboard.
+          </p>
+        </div>
+        <img
+          class="hero-image"
+          src="/assets/missing-product.png"
+          alt="A preview of the Northstar monitoring dashboard"
+        />
+      </section>
+
+      <section class="services" aria-labelledby="services-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Live services</p>
+            <h2 id="services-title">Platform status</h2>
+          </div>
+          <p>Updated moments ago</p>
+        </div>
+
+        <div class="service-grid">
+          <article>
+            <h3>Monitoring</h3>
+            <p>Event processing and release telemetry are available.</p>
+            <strong>Operational</strong>
+          </article>
+          <article>
+            <h3>Reporting</h3>
+            <p>Generated reports are ready for review and export.</p>
+            <strong>Operational</strong>
+          </article>
+        </div>
+      </section>
+
+      <section class="updates" aria-labelledby="updates-title">
+        <div>
+          <p class="eyebrow">Release notes</p>
+          <h2 id="updates-title">Get status updates</h2>
+          <p>Receive one concise message when a service changes state.</p>
+        </div>
+
+        <form id="subscription-form">
+          <span class="field-prompt">Work email</span>
+          <div class="form-row">
+            <input
+              id="email"
+              name="email"
+              type="email"
+              placeholder="you@example.test"
+              required
+            />
+            <button type="submit">Subscribe</button>
+          </div>
+          <p id="form-status" class="form-status" aria-live="polite"></p>
+        </form>
+      </section>
+    </main>
+
+    <footer>
+      <p>Northstar demo environment</p>
+    </footer>
+  </body>
+</html>

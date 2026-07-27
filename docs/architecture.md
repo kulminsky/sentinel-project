@@ -17,6 +17,13 @@ Sentinel provides:
 
 The design favors plain functions, fixed check registration, explicit boundaries, and bounded concurrency at the analysis-level boundary. Sentinel is not a plugin platform or a hosted service.
 
+The repository currently includes a standalone Express and TypeScript sample
+target with its own manifest and lockfile. Root installation installs it with
+package scripts disabled, while its process remains explicitly controlled by
+the reviewer. Its seeded Security, API, and UI flaws are test fixtures for
+future milestones, not evidence that those Sentinel checks are already
+implemented.
+
 ## Approved Architecture
 
 The scan is coordinated by one visible pipeline:
@@ -228,7 +235,10 @@ The current feasibility spike is intentionally synthetic: it sends only a fixed,
 
 ## Testing Strategy
 
-Automated tests use Vitest. `npm run check` is the milestone-completion gate and runs formatting verification, linting, compilation, and the test suite.
+Sentinel's automated tests use Vitest. The standalone sample target uses Node's
+built-in test runner so it remains independent of Sentinel's implementation.
+`npm run check` is the milestone-completion gate and runs formatting
+verification, linting, compilation, and both test suites.
 
 Required unit tests focus on:
 
@@ -252,7 +262,12 @@ Required integration tests cover:
 - Disabled, valid, and invalid fake-AI responses.
 - Required report-field completeness.
 
-Live paid-AI calls, live npm registry queries, live vulnerability databases, full browser matrices, and external repositories are not part of the automated test suite. A complete automated CLI/Playwright smoke test is a stretch goal; the demo sample run remains mandatory.
+Live paid-AI calls, live npm registry queries, live vulnerability databases,
+full browser matrices, and external repositories are not part of the automated
+test suite. The sample tests lock both intentional flaws and correct behavior
+without invoking Sentinel, Playwright, or external services. A complete
+automated CLI/Playwright smoke test is a stretch goal; the separate-process demo
+sample run remains mandatory.
 
 ## Implementation Order
 
@@ -263,7 +278,10 @@ Live paid-AI calls, live npm registry queries, live vulnerability databases, ful
 5. Add service probes, shallow OpenAPI fallback, and safe API/security runtime checks. Central reachability probing is complete; fallback and runtime assertions are pending.
 6. Add the Playwright lifecycle and required browser checks.
 7. Complete the bounded AI check and no-AI behavior.
-8. Harden tests, generate the demo report, complete the README, and assemble Cursor evidence.
+8. Harden tests, generate the demo report, complete the README, and assemble
+   Cursor evidence. The standalone demo target and scan configuration are
+   complete; the committed report and remaining submission evidence are
+   pending.
 9. Attempt stretch work only after all required deliverables pass.
 
 Capture genuine Cursor evidence throughout these milestones rather than reconstructing it at the end.

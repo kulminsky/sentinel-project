@@ -9,8 +9,12 @@
   },
   "scripts": {
     "build": "tsc --project tsconfig.json",
+    "postinstall": "npm ci --prefix sample-app --ignore-scripts",
     "prestart": "npm run build",
     "start": "node dist/src/cli.js",
+    "sample:start": "npm --prefix sample-app start",
+    "sample:scan": "npm start -- --config ./sample-app/sentinel.config.json",
+    "sample:check": "npm --prefix sample-app run check",
     "pretest": "npm run build",
     "test": "vitest run --dir tests",
     "pretest:watch": "npm run build",
@@ -19,7 +23,7 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "npm run format:check && npm run lint && npm test"
+    "check": "npm run format:check && npm run lint && npm test && npm run sample:check"
   },
   "engines": {
     "node": ">=20.19.0"

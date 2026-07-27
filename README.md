@@ -8,7 +8,7 @@ Deliver a polished, reviewable MVP that demonstrates deliberate quality-engineer
 
 ## Current Status
 
-**Foundation, AI feasibility, tooling, configuration, concurrent-runner, validated-reporting, and repository-analysis milestones complete.**
+**Foundation, AI feasibility, tooling, configuration, concurrent-runner, validated-reporting, repository-analysis, and reproducible-demo-target milestones complete.**
 
 Sentinel currently:
 
@@ -30,6 +30,11 @@ Sentinel currently:
 
 Secret detection, vulnerability analysis, API assertions, static API fallback, Playwright browser automation, and production repository evidence selection are not implemented yet. API/UI endpoint, page, authentication, viewport, and form-flow settings remain dormant; only service targets and timeouts drive reachability probes. The Playwright library is installed for the planned browser milestone, but browser binaries are intentionally not installed.
 
+The repository also contains a runnable, deliberately flawed Express and
+TypeScript target under `sample-app/`. It provides stable future evidence for
+the unfinished Security, API, and UI milestones; its presence does not imply
+that Sentinel detects those seeded flaws yet.
+
 ## Development Setup
 
 Prerequisites:
@@ -42,6 +47,10 @@ From a clean clone, install dependencies:
 ```sh
 npm install
 ```
+
+The root installation also performs a script-disabled, lockfile-based install
+for the standalone sample target. It does not install Playwright browser
+binaries.
 
 Then run the current scan against the repository in the current working directory:
 
@@ -63,8 +72,46 @@ npm run lint         # Run ESLint
 npm run lint:fix     # Apply safe ESLint fixes
 npm run format       # Format tracked project files
 npm run format:check # Verify formatting
-npm run check        # Run formatting, linting, build, and tests
+npm run sample:start # Build and run the local sample target
+npm run sample:scan  # Scan the running sample target
+npm run sample:check # Check the standalone sample package
+npm run check        # Check Sentinel and the sample package
 ```
+
+## Sample Target
+
+Start the deliberately flawed target after the root install:
+
+```sh
+npm run sample:start
+```
+
+It listens on `http://127.0.0.1:4310` by default and requires no database,
+credentials, or external services. In a second terminal, run:
+
+```sh
+npm run sample:scan
+```
+
+Sentinel uses
+[`sample-app/sentinel.config.json`](sample-app/sentinel.config.json) and writes
+the ignored local report `sample-app/sentinel-report.md`. The scanner does not
+start or stop the target.
+
+The fixture intentionally includes:
+
+- A stale, pinned dependency currently reported as vulnerable by npm.
+- A public debug route, missing security headers, and route-scoped wildcard
+  CORS.
+- One OpenAPI/live-response drift and one endpoint above the configured latency
+  threshold.
+- A broken image, deterministic console error, and unlabeled form input.
+
+Health, catalog behavior, non-public CORS behavior, responsive layout, and the
+configured client-side form flow remain correct so the eventual report contains
+meaningful passes as well as findings. The detailed security, API, and browser
+checks that will consume this evidence are still planned. See
+[`sample-app/README.md`](sample-app/README.md) for the fixture contract.
 
 ## Configuration
 
@@ -172,7 +219,7 @@ This list describes the approved implementation target, not functionality curren
 5. **In progress:** Service reachability is complete; add shallow API fallback and safe API/security runtime checks.
 6. Add the Playwright lifecycle and required browser checks.
 7. Complete AI integration and no-AI fallback behavior.
-8. Harden tests and complete the demo, sample report, documentation, and process evidence.
+8. **In progress:** The reproducible demo target is complete; harden remaining tests and complete the sample report, documentation, and process evidence.
 
 Stretch work begins only after all required milestones and submission artifacts are complete.
 
@@ -219,6 +266,15 @@ The repository currently contains the foundation implementation and its document
 │   │   └── inspection.ts
 │   ├── cli.ts
 │   └── scan.ts
+├── sample-app/
+│   ├── public/
+│   │   └── assets/
+│   ├── src/
+│   ├── tests/
+│   ├── openapi.json
+│   ├── package.json
+│   ├── sentinel.config.json
+│   └── tsconfig.json
 ├── tests/
 │   ├── support/
 │   │   └── fake-ai-provider.ts
@@ -274,7 +330,9 @@ For each milestone:
 - **Static analysis — in progress:** bounded inventory, Node/TypeScript detection, and repository checks are complete; security checks remain planned.
 - **Runtime analysis:** centralized API/UI reachability is complete; API fallback/assertions and Playwright checks remain planned.
 - **AI analysis:** synthetic multi-provider feasibility is complete; production evidence selection and redaction remain planned.
-- **Submission readiness:** tests, demo target, sample report, documentation, and process evidence.
+- **Submission readiness — in progress:** the standalone demo target is complete;
+  the final sample report, remaining documentation, and process evidence are
+  pending.
 
 ## README Maintenance by Milestone
 
@@ -289,6 +347,7 @@ This README should grow with implemented behavior rather than describe planned f
 | Playwright                       | Update MVP Scope; document supported browser checks and any verified limitations.                                                                                        |
 | AI feasibility spike             | Completed: Current Status, Development Setup, Project Structure, provider behavior, synthetic data handling, limits, and fallback now reflect the implementation.        |
 | Production AI integration        | Replace synthetic-only guidance with verified evidence selection, redaction, configuration, and sample-report behavior.                                                  |
-| Submission readiness             | Replace planning-oriented status text; add verified usage, sample-report, testing, known-gap, and process-evidence sections.                                             |
+| Demo target                      | Completed: Current Status, Development Setup, Sample Target, Project Structure, roadmap, and limitations describe the runnable fixture.                                  |
+| Submission readiness             | Replace remaining planning-oriented status text; add the committed sample report, final known gaps, and process-evidence sections.                                       |
 
 Planned items should be removed or marked complete only after their implementation and tests are verified.
