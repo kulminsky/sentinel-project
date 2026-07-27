@@ -4,7 +4,6 @@ import {
   apiRuntimeContractCheck,
   apiStaticOpenApiCheck,
 } from "./api/checks.js";
-import { uiCoverageCheck } from "./coverage.js";
 import {
   repositoryDependencyFreshnessCheck,
   repositoryLockfileCheck,
@@ -26,6 +25,7 @@ import {
   apiAvailabilityCheck,
   uiAvailabilityCheck,
 } from "./service-availability.js";
+import { uiBrowserCheck } from "./ui/check.js";
 
 export const CHECKS: readonly Check[] = [
   repositoryGitignoreCheck,
@@ -46,5 +46,5 @@ export const CHECKS: readonly Check[] = [
   apiStaticOpenApiCheck,
   syntheticAiCheck,
   uiAvailabilityCheck,
-  uiCoverageCheck,
+  uiBrowserCheck,
 ];

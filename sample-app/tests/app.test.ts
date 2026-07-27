@@ -161,6 +161,7 @@ void test("serves the functional frontend with its deliberate UI findings", asyn
   const input = html.match(/<input[\s\S]*?id="email"[\s\S]*?\/>/)?.[0];
   assert.notEqual(input, undefined);
   assert.doesNotMatch(input ?? "", /aria-label(?:ledby)?=/);
+  assert.doesNotMatch(input ?? "", /placeholder=/);
 
   const validAsset = await fetch(`${baseUrl}/assets/sentinel-mark.svg`);
   const missingAsset = await fetch(`${baseUrl}/assets/missing-product.png`);

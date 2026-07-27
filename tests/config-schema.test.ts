@@ -133,6 +133,56 @@ test("full target configuration validates and normalizes filesystem paths", () =
   }
 });
 
+test("UI pages and form flows enforce strict execution bounds", () => {
+  const tooManyPages = structuredClone(validConfig());
+  const pages = (tooManyPages.ui as { pages: unknown[] }).pages;
+  while (pages.length <= 10) {
+    pages.push({
+      name: `page-${pages.length}`,
+      path: `/page-${pages.length}`,
+      useAuthentication: false,
+    });
+  }
+
+  const tooManyFlows = structuredClone(validConfig());
+  const flows = (tooManyFlows.ui as { formFlows: unknown[] }).formFlows;
+  while (flows.length <= 5) {
+    flows.push({
+      name: `flow-${flows.length}`,
+      startPath: `/flow-${flows.length}`,
+      useAuthentication: false,
+      steps: [
+        {
+          type: "click",
+          selector: "#submit",
+        },
+      ],
+    });
+  }
+
+  const emptySteps = structuredClone(validConfig());
+  (
+    (emptySteps.ui as { formFlows: Array<{ steps: unknown[] }> }).formFlows[0]
+      ?.steps ?? []
+  ).splice(0);
+
+  const tooManySteps = structuredClone(validConfig());
+  const steps = (tooManySteps.ui as { formFlows: Array<{ steps: unknown[] }> })
+    .formFlows[0]?.steps;
+  assert.ok(steps !== undefined);
+  while (steps.length <= 20) {
+    steps.push({
+      type: "click",
+      selector: `#step-${steps.length}`,
+    });
+  }
+
+  assert.ok(issuePaths(tooManyPages).includes("ui.pages"));
+  assert.ok(issuePaths(tooManyFlows).includes("ui.formFlows"));
+  assert.ok(issuePaths(emptySteps).includes("ui.formFlows.0.steps"));
+  assert.ok(issuePaths(tooManySteps).includes("ui.formFlows.0.steps"));
+});
+
 test("report formats enforce strict output path rules", () => {
   const schema = createSentinelConfigSchema(BASE_DIRECTORY);
   const markdown = schema.parse({

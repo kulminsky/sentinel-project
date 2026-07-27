@@ -4,6 +4,9 @@ import { z } from "zod";
 
 const DEFAULT_TARGET_ROOT = ".";
 const DEFAULT_REPORT_PATH = "sentinel-report.md";
+const MAX_UI_PAGES = 10;
+const MAX_UI_FORM_FLOWS = 5;
+const MAX_UI_FORM_STEPS = 20;
 export const REPORT_FORMATS = ["markdown", "json", "terminal"] as const;
 
 const nonEmptyStringSchema = z
@@ -244,7 +247,13 @@ const formFlowSchema = z.strictObject({
   name: nonEmptyStringSchema,
   startPath: originRelativePathSchema,
   useAuthentication: z.boolean(),
-  steps: z.array(formStepSchema),
+  steps: z
+    .array(formStepSchema)
+    .min(1, "Expected at least one form-flow step.")
+    .max(
+      MAX_UI_FORM_STEPS,
+      `Expected at most ${MAX_UI_FORM_STEPS} form-flow steps.`,
+    ),
 });
 
 const disabledAiSchema = z.strictObject({
@@ -356,7 +365,9 @@ export function createSentinelConfigSchema(
     .strictObject({
       baseUrl: httpUrlSchema,
       timeoutMs: positiveIntegerSchema,
-      pages: z.array(pageSchema),
+      pages: z
+        .array(pageSchema)
+        .max(MAX_UI_PAGES, `Expected at most ${MAX_UI_PAGES} UI pages.`),
       viewports: z.tuple([viewportSchema, viewportSchema]),
       authentication: z
         .discriminatedUnion("kind", [
@@ -364,7 +375,13 @@ export function createSentinelConfigSchema(
           storageStateAuthenticationSchema,
         ])
         .optional(),
-      formFlows: z.array(formFlowSchema).optional(),
+      formFlows: z
+        .array(formFlowSchema)
+        .max(
+          MAX_UI_FORM_FLOWS,
+          `Expected at most ${MAX_UI_FORM_FLOWS} UI form flows.`,
+        )
+        .optional(),
     })
     .superRefine((ui, context) => {
       addDuplicateNameIssues(ui.pages, "pages", context);

@@ -73,7 +73,7 @@ test("scanProject emits deterministic repository and coverage rows", async () =>
         "api.openapi-fallback",
         "ai.api-test-gap",
         "ui.service-availability",
-        "ui.coverage",
+        "ui.browser-analysis",
       ],
     );
     assert.equal(
@@ -85,7 +85,7 @@ test("scanProject emits deterministic repository and coverage rows", async () =>
       report.results
         .filter((result) => result.diagnosticCode === "LEVEL_NOT_IMPLEMENTED")
         .map((result) => result.checkId),
-      ["ui.coverage"],
+      [],
     );
   });
 });

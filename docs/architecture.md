@@ -21,7 +21,7 @@ The repository currently includes a standalone Express and TypeScript sample
 target with its own manifest and lockfile. Root installation installs it with
 package scripts disabled, while its process remains explicitly controlled by
 the reviewer. Its Security and API evidence is consumed by implemented checks;
-its seeded UI flaws remain fixtures for the future browser milestone.
+its seeded UI flaws are consumed by the implemented Playwright check.
 
 ## Approved Architecture
 
@@ -64,7 +64,7 @@ Use a fixed list of plain check functions. External capabilities are passed only
 - Vitest runs source tests, while ESLint and Prettier enforce static quality and formatting.
 - GitHub Actions runs the same aggregate `npm run check` command used locally.
 - One symlink-safe repository inventory supports generic, Node/npm, and TypeScript checks without retaining whole-repository contents.
-- The Playwright library is installed, but its configuration, browser binaries, and automation boundary remain deferred to the browser milestone.
+- The Playwright Chromium boundary and axe integration are implemented; compatible browser binaries remain an explicit runtime installation and are not downloaded during `npm install`.
 
 ## Setup and Concurrent Execution Flow
 
@@ -80,7 +80,7 @@ Sentinel then probes only configured API and UI targets:
 
 After probing, Code & Repository, Security, API / Backend, and UI / Browser groups start concurrently. Checks remain sequential within a level. The runner preserves level and registration order, enforces each check timeout with an abort signal, and converts a timeout or exception into one isolated `Skipped / Info` diagnostic row.
 
-Security checks consume the cached observations before making bounded requests to configured unauthenticated endpoints or pages. Cached API reachability exclusively selects live contract/latency analysis or static OpenAPI fallback. Reachable UIs receive Playwright checks when browser automation is implemented.
+Security checks consume the cached observations before making bounded requests to configured unauthenticated endpoints or pages. Cached API reachability exclusively selects live contract/latency analysis or static OpenAPI fallback. Reachable UIs with configured browser targets receive one shared Playwright Chromium session.
 
 Sentinel never scans localhost ports and never starts, stops, or restarts target services.
 
@@ -138,7 +138,7 @@ The production AI redaction milestone will register only explicitly referenced v
 
 Rule customization, custom secret-pattern languages, and per-check plugin configuration are outside the MVP.
 
-API/UI base targets and timeouts drive central reachability probing. API configuration also supplies one target-contained OpenAPI file, read-only endpoints, expectations, and optional header-authentication references for implemented API analysis. Unauthenticated endpoints and pages are consumed by Security header/CORS observations, and configured debug-like paths contribute debug-route evidence; Security never resolves target authentication. UI authentication, viewports, and form flows remain dormant until the Playwright milestone. The complete implemented contract is documented in `docs/configuration.md`.
+API/UI base targets and timeouts drive central reachability probing. API configuration also supplies one target-contained OpenAPI file, read-only endpoints, expectations, and optional header-authentication references for implemented API analysis. Unauthenticated endpoints and pages are consumed by Security header/CORS observations, and configured debug-like paths contribute debug-route evidence; Security never resolves target authentication. Playwright consumes at most 10 configured UI pages, exactly two viewports, optional header or storage-state authentication, and at most five form flows with 20 steps each. The complete implemented contract is documented in `docs/configuration.md`.
 
 ## Repository Analysis Boundary
 
@@ -161,7 +161,7 @@ Dependency freshness runs one read-only, non-scripted `npm outdated --json --lon
 
 An incomplete inventory never becomes a false absence warning. Positive evidence remains usable, while an affected absence-based check returns `Skipped / Info` and marks the report incomplete. Repository evidence contains only relative paths, recognized configuration names, and validated package/version metadata; raw file contents, command errors, registry configuration, and credentials are not rendered.
 
-API contract/runtime analysis is implemented. UI browser coverage remains explicitly represented by a `Skipped / Info` placeholder row until its milestone is implemented. Existing Security checks, API/UI availability, and synthetic AI behavior remain active.
+API contract/runtime and UI browser analysis are implemented. Existing Security checks, API/UI availability, and synthetic AI behavior remain active.
 
 ## Security Analysis Boundary
 
@@ -213,7 +213,7 @@ Sentinel should produce the most complete report possible:
 | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | No config or runtime URLs                                            | Scan the current directory statically; skip affected runtime checks.                   |
 | API unavailable                                                      | Emit a normal availability note and run only static OpenAPI fallback.                  |
-| UI unavailable                                                       | Emit a normal availability note and skip future browser checks.                        |
+| UI unavailable                                                       | Emit a normal availability note and skip browser analysis before launch.               |
 | Authentication absent                                                | Run public checks and skip only protected expectations.                                |
 | OpenAPI invalid                                                      | Warn without claiming runtime shape coverage; source-route fallback remains pending.   |
 | Repository inventory bounded or partially unreadable                 | Preserve positive evidence; skip affected absence claims and mark the scan incomplete. |
@@ -250,11 +250,14 @@ All runtime API checks are read-only. Sentinel does not issue `POST`, `PUT`, `PA
 
 All browser automation uses Playwright with Chromium:
 
-- The integration boundary owns browser launch and guaranteed cleanup.
-- Authentication is limited to configured storage state or headers.
-- Pages and viewports are explicitly configured and same-origin by default.
-- Checks cover navigation, page/console errors, failed resources, broken images, axe-based accessibility, responsive overflow, and bounded configured form flows.
-- Form actions are limited to navigation, fill, check/uncheck, click, and visible-text or URL assertions.
+- One composite `ui.browser-analysis` check owns one Chromium launch and bounded cleanup attempts for every browser resource. It reuses one public context and, when required, one authenticated context.
+- Missing or unreachable UI services skip browser work before launch. A launch failure produces exactly one `Skipped / Info` diagnostic, recommends `npx playwright install chromium`, marks the report incomplete, and leaves other levels running.
+- Authentication is limited to configured storage state or headers. Header values are resolved only for protected targets and applied only to same-origin requests.
+- Every configured page loads once at each of the two viewports. The same loads provide navigation, console/page-error, broken-image, axe WCAG A/AA, and horizontal-overflow observations. Axe rules that require manual review remain visible as indeterminate results and prevent an accessibility pass.
+- Form flows run at the widest configured viewport. Actions are limited to navigation, fill, check/uncheck, click, exact visible-text, and exact same-origin URL assertions.
+- Every Playwright operation uses the smaller of `ui.timeoutMs` and the remaining 120-second internal budget. A non-cancellable observation timeout closes that page before the next viewport or target; completed categories remain available, later categories are unavailable, and axe runs last.
+- The check uses a 120-second internal budget inside its 125-second runner timeout. Completed findings survive budget exhaustion, which adds a coverage-limited skip and marks the report incomplete. Context and browser cleanup share bounded headroom inside the runner timeout, and cleanup failure marks the result incomplete.
+- Evidence is capped and contains only sanitized counts, page/viewport labels, same-origin image paths, and axe rule metadata. Raw console/exception text, selectors, form values, headers, credentials, complete URLs, and queries are never rendered.
 - Sentinel never discovers and submits arbitrary forms.
 
 Playwright objects do not escape into the scan coordinator or report module.
@@ -313,6 +316,7 @@ Required unit tests focus on:
 - Environment-file ignore hygiene, runtime header/CORS policy, and evidence-derived debug routes.
 - Safe endpoint selection and shallow response expectations.
 - Exclusive live/static API mode selection, bounded response handling, and per-endpoint latency.
+- Shared Playwright session behavior, browser-unavailable degradation, page observations, axe severity, authentication isolation, responsive checks, and every configured form-step variant.
 - AI response and citation validation.
 
 Required integration tests cover:
@@ -320,6 +324,7 @@ Required integration tests cover:
 - Generic and Node repository scans with no target services.
 - Unreachable API/UI degradation and static fallback.
 - Controlled HTTP observations.
+- Deterministic fake Playwright observations without a browser binary or target service.
 - Recorded npm audit output.
 - Disabled, valid, and invalid fake-AI responses.
 - Required report-field completeness.
@@ -329,7 +334,7 @@ full browser matrices, and external repositories are not part of the automated
 test suite. The sample tests lock both intentional flaws and correct behavior
 without invoking Sentinel, Playwright, or external services. A complete
 automated CLI/Playwright smoke test is a stretch goal; the separate-process demo
-sample run remains mandatory.
+sample run with explicitly installed Chromium remains mandatory.
 
 ## Implementation Order
 
@@ -338,7 +343,7 @@ sample run remains mandatory.
 3. Implement configuration, the isolated concurrent runner, redaction, inventory, stack detection, and generic repository checks. Configuration, the runner, inventory, detection, and repository checks are complete; production AI evidence redaction remains pending.
 4. Add secret detection and npm-only vulnerability analysis. This milestone is complete.
 5. Add service probes, shallow OpenAPI fallback, and safe API/security runtime checks. This milestone is complete.
-6. Add the Playwright lifecycle and required browser checks.
+6. Add the shared Playwright Chromium lifecycle and required browser checks. This milestone is complete.
 7. Harden the synthetic AI check behind a provider-neutral, one-call, fail-closed client and preserve no-AI behavior. This milestone is complete; production evidence selection and redaction remain pending.
 8. Harden tests, generate the demo report, complete the README, and assemble
    Cursor evidence. The standalone demo target and scan configuration are

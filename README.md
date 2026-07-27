@@ -8,7 +8,7 @@ Deliver a polished, reviewable MVP that demonstrates deliberate quality-engineer
 
 ## Current Status
 
-**Foundation, AI feasibility, tooling, configuration, concurrent-runner, validated-reporting, repository-analysis, Security-analysis, API-analysis, and reproducible-demo-target milestones complete.**
+**Foundation, AI feasibility, tooling, configuration, concurrent-runner, validated-reporting, repository-analysis, Security-analysis, API-analysis, Playwright-browser-analysis, and reproducible-demo-target milestones complete.**
 
 Sentinel currently:
 
@@ -23,7 +23,7 @@ Sentinel currently:
 - Audits root npm lockfiles, detects high-confidence secrets without reporting their values, and checks `.env` ignore hygiene.
 - Uses configured unauthenticated targets for bounded security-header, CORS, and evidence-derived debug-endpoint observations.
 - Exclusively selects live API contract/latency analysis or static OpenAPI fallback from the cached API reachability result.
-- Reports an explicit `Skipped / Info` coverage row for unfinished UI analysis.
+- Runs one composite Playwright Chromium check across configured pages, responsive viewports, axe accessibility, browser errors, broken images, and optional form flows.
 - Runs or gracefully skips one synthetic semantic API test-gap check through a provider-neutral typed client.
 - Supports explicit OpenAI or Claude selection while keeping vendor envelopes out of check logic.
 - Uses native schema-constrained output, validates it locally, and fails closed on every unrecognized response.
@@ -32,12 +32,11 @@ Sentinel currently:
 - Includes one normalized Overall Summary with complete status/severity counts and a deterministic narrative.
 - Returns a nonzero exit code only when configuration cannot be loaded, the scan cannot run, or the selected report cannot be rendered or written.
 
-Playwright browser automation, production AI evidence selection, source-route fallback, entropy scanning, and Git-history scanning are not implemented yet. Configured API endpoints and header-authentication references are consumed by API analysis; UI authentication values, viewports, and form flows remain dormant. The Playwright library is installed for the planned browser milestone, but browser binaries are intentionally not installed.
+Production AI evidence selection, source-route fallback, entropy scanning, and Git-history scanning are not implemented yet. Configured API and UI authentication references are resolved only for the explicitly protected runtime targets that use them. Playwright browser binaries remain an explicit installation step and are intentionally not downloaded by `npm install`.
 
 The repository also contains a runnable, deliberately flawed Express and
-TypeScript target under `sample-app/`. Sentinel now consumes its Security and
-API evidence; the seeded UI flaws remain fixtures for the unfinished browser
-milestone.
+TypeScript target under `sample-app/`. Sentinel consumes its Security, API, and
+UI evidence.
 
 ## Development Setup
 
@@ -64,7 +63,17 @@ npm start
 
 `npm start` builds the project automatically and writes `sentinel-report.md` in the current working directory. No environment configuration or running target service is required for this default, AI-disabled path. Applicable Node/npm targets receive bounded dependency-freshness and vulnerability queries; unavailable npm or registry access produces skipped notes rather than stopping the scan.
 
-Playwright browser downloads are deliberately separate from package installation. This milestone does not include a Playwright configuration, browser installation command, or browser automation.
+Playwright browser downloads are deliberately separate from package
+installation. Install the compatible Chromium binary only when running UI
+analysis:
+
+```sh
+npx playwright install chromium
+```
+
+On Linux hosts that also need system packages, use
+`npx playwright install --with-deps chromium`. The default no-UI scan and
+`npm run check` do not require a browser binary.
 
 Available development commands:
 
@@ -87,6 +96,7 @@ npm run check        # Check Sentinel and the sample package
 Start the deliberately flawed target after the root install:
 
 ```sh
+npx playwright install chromium
 npm run sample:start
 ```
 
@@ -111,10 +121,11 @@ The fixture intentionally includes:
   threshold.
 - A broken image, deterministic console error, and unlabeled form input.
 
-Health, catalog behavior, non-public CORS behavior, responsive layout, and the
-configured client-side form flow remain correct so the eventual report contains
-meaningful passes as well as findings. Security and API checks are implemented;
-the browser checks remain planned. See
+Health, catalog behavior, non-public CORS behavior, responsive layout, page
+navigation, and the configured client-side form flow remain correct so the
+report contains meaningful passes as well as findings. The Playwright scan
+reports the deliberate console error, broken image, and axe-detected unlabeled
+input. See
 [`sample-app/README.md`](sample-app/README.md) for the fixture contract.
 
 ## Configuration
@@ -129,7 +140,7 @@ npm start -- --config ./path/to/sentinel.config.json
 
 Configuration is recursively strict. Invalid values, incomplete supplied sections, and unknown keys stop the scan with a property-specific error; Sentinel never silently replaces invalid configuration with defaults.
 
-See [`docs/configuration.md`](docs/configuration.md) for the complete JSON contract, environment mappings, precedence, path resolution, and credential-reference rules. API configuration drives central reachability, exclusive live/static contract analysis, and unauthenticated Security observations. UI browser behavior is not executed yet.
+See [`docs/configuration.md`](docs/configuration.md) for the complete JSON contract, environment mappings, precedence, path resolution, and credential-reference rules. API configuration drives central reachability, exclusive live/static contract analysis, and unauthenticated Security observations. UI configuration drives the shared Playwright session, page/viewports, optional authentication, and bounded form flows.
 
 ## Report Output
 
@@ -205,6 +216,39 @@ required nested `items` schema is outside this shallow validator. Deep
 composition, comprehensive `$ref` resolution, generated payloads, unsafe
 methods, and source-route discovery remain out of scope.
 
+## UI / Browser Analysis
+
+When the cached UI probe is reachable and browser targets are configured,
+Sentinel launches Playwright Chromium once. One composite check reuses public
+and optional authenticated contexts across all observations:
+
+- Each configured page loads once at each of the two configured viewports.
+  Those loads provide navigation status, `console.error` and uncaught exception
+  counts, broken-image observations, axe WCAG A/AA results, and horizontal
+  overflow checks.
+- Header authentication is added only to same-origin requests. Storage-state
+  authentication is passed directly to Playwright. Missing authentication
+  prerequisites skip only protected targets.
+- Optional configured form flows run at the widest configured viewport and are
+  limited to navigation, fill, check/uncheck, click, exact visible-text, and
+  exact same-origin URL assertions.
+
+Configuration accepts at most 10 pages, five form flows, and 20 steps per flow.
+The browser check has a 120-second internal budget and preserves completed
+findings when that budget is exhausted. Evidence contains counts, sanitized
+same-origin image paths, viewport names, and axe rule metadata; it never
+contains console text, raw exceptions, form values, selectors, authentication
+headers, credentials, full URLs, or query strings.
+Indeterminate axe rules remain visible, prevent an accessibility pass, and mark
+the report incomplete for manual review.
+
+If Chromium cannot launch, the complete browser analysis degrades to one
+`Skipped / Info` row with the remediation command
+`npx playwright install chromium`. The report is marked incomplete, other
+analysis levels continue, and the CLI still exits zero. Missing or unreachable
+UI services are ordinary complete-scan skips and never cause a browser launch.
+Sentinel does not start the target service.
+
 ## Synthetic AI Feasibility Check
 
 AI is disabled by default and uses only a committed, secret-free synthetic contract-and-test fixture. Sentinel does not scan or send repository source code in this milestone.
@@ -277,7 +321,8 @@ The approved MVP is scoped to:
 - Graceful behavior when services, configuration, tools, or optional AI credentials are unavailable.
 - Focused automated tests, a reproducible demo target, a sample report, and genuine development-process evidence.
 
-This list describes the approved implementation target, not functionality currently available.
+This list describes the approved MVP boundary. Production AI evidence selection,
+the committed sample report, and submission evidence remain unfinished.
 
 ## Planned Milestones
 
@@ -286,7 +331,7 @@ This list describes the approved implementation target, not functionality curren
 3. **In progress:** Configuration, the runner, inventory, stack detection, and repository checks are complete; production AI evidence redaction remains pending.
 4. **Complete:** Add high-confidence secret detection, `.env` hygiene, and npm-only vulnerability analysis.
 5. **Complete:** Add service reachability, Security runtime observations, shallow OpenAPI fallback, and read-only API contract/latency assertions.
-6. Add the Playwright lifecycle and required browser checks.
+6. **Complete:** Add the shared Playwright Chromium lifecycle and required browser checks.
 7. **Complete for the synthetic spike:** Harden provider-neutral, fail-closed AI execution and no-AI behavior; production evidence selection and redaction remain pending.
 8. **In progress:** The reproducible demo target is complete; harden remaining tests and complete the sample report, documentation, and process evidence.
 
@@ -328,7 +373,9 @@ The repository currently contains the foundation implementation and its document
 │   │   │   ├── headers.ts
 │   │   │   ├── runtime.ts
 │   │   │   └── secrets.ts
-│   │   ├── coverage.ts
+│   │   ├── ui/
+│   │   │   ├── check.ts
+│   │   │   └── session.ts
 │   │   ├── registry.ts
 │   │   └── service-availability.ts
 │   ├── config/
@@ -376,7 +423,8 @@ The repository currently contains the foundation implementation and its document
 │   ├── scan-report.test.ts
 │   ├── security-audit.test.ts
 │   ├── security-files.test.ts
-│   └── security-runtime.test.ts
+│   ├── security-runtime.test.ts
+│   └── ui-browser.test.ts
 ├── .prettierignore
 ├── .prettierrc.json
 ├── AGENTS.md
@@ -410,11 +458,11 @@ For each milestone:
 ## Roadmap
 
 - **Foundation — complete:** executable project skeleton, runtime-validated result/summary model, and selectable Markdown/JSON/terminal reporting.
-- **Tooling — complete:** reproducible npm setup, CLI/config libraries, Vitest, linting, formatting, and CI checks; Playwright browser installation remains deferred.
+- **Tooling — complete:** reproducible npm setup, CLI/config libraries, Vitest, linting, formatting, and CI checks; Playwright Chromium installation remains an explicit runtime step.
 - **Configuration — complete:** strict JSON and environment loading, normalized target/report paths, source precedence, and fatal path-specific validation.
 - **Core runner — complete:** four concurrent analysis-level groups, sequential per-level checks, per-check timeouts, isolated failures, and deterministic ordering.
 - **Static analysis — in progress:** bounded inventory, Node/TypeScript detection, repository checks, npm audit, high-confidence secret detection, `.env` hygiene, and static OpenAPI fallback are implemented; source-route fallback remains pending.
-- **Runtime analysis — in progress:** centralized API/UI reachability, unauthenticated header/CORS/debug observations, and read-only API contract/latency checks are complete; Playwright checks remain planned.
+- **Runtime analysis — complete for the approved deterministic scope:** centralized API/UI reachability, unauthenticated header/CORS/debug observations, read-only API contract/latency checks, and shared-session Playwright browser checks are implemented.
 - **AI analysis:** provider-neutral, fail-closed synthetic multi-provider execution is complete and the OpenAI path has been manually verified; live Claude verification plus production evidence selection and redaction remain planned.
 - **Submission readiness — in progress:** the standalone demo target is complete;
   the final sample report, remaining documentation, and process evidence are
@@ -430,7 +478,7 @@ This README should grow with implemented behavior rather than describe planned f
 | Validated reporting              | Completed: Current Status, Configuration, report behavior, model invariants, and Project Structure reflect all three implemented formats.                         |
 | Repository and security analysis | Completed: Current Status, Repository Analysis, Security Analysis, Project Structure, and limitations reflect implemented behavior.                               |
 | API runtime and fallback         | Completed: Current Status, Configuration, API / Backend Analysis, Project Structure, roadmap, and degradation behavior reflect the implementation.                |
-| Playwright                       | Update MVP Scope; document supported browser checks and any verified limitations.                                                                                 |
+| Playwright                       | Completed: Current Status, setup, configuration, UI analysis, Project Structure, roadmap, and verified sample behavior reflect the implementation.                |
 | AI feasibility spike             | Completed: Current Status, Development Setup, Project Structure, provider behavior, synthetic data handling, limits, and fallback now reflect the implementation. |
 | Production AI integration        | Replace synthetic-only guidance with verified evidence selection, redaction, configuration, and sample-report behavior.                                           |
 | Demo target                      | Completed: Current Status, Development Setup, Sample Target, Project Structure, roadmap, and limitations describe the runnable fixture.                           |

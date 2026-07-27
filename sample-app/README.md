@@ -10,6 +10,7 @@ From the Sentinel repository root, install both projects and start the target:
 
 ```sh
 npm install
+npx playwright install chromium
 npm run sample:start
 ```
 
@@ -25,11 +26,14 @@ does not start or stop this process. With the service running, API analysis
 checks each configured endpoint once: catalog and public-feed contract checks
 pass, profile fails because the live body omits OpenAPI-required `plan`, and the
 slow endpoint exceeds the configured latency threshold. Static fallback is
-explicitly skipped.
+explicitly skipped. The shared Playwright session reports successful page loads
+and responsive layout, the deliberate console errors and broken image, the
+axe-detected unlabeled input, and the successful subscription form flow.
 
-If the service is stopped, the same scan performs no endpoint requests. Live
-analysis is skipped and the configured `openapi.json` receives static contract
-alignment analysis instead.
+If the service is stopped, the same scan performs no endpoint or browser
+requests. Live API analysis is skipped, the configured `openapi.json` receives
+static contract alignment analysis, and UI browser analysis emits an ordinary
+runtime-unavailable note without launching Chromium.
 
 Use `SENTINEL_SAMPLE_HOST` or `SENTINEL_SAMPLE_PORT` only when the default
 loopback binding is unavailable. Matching Sentinel API and UI URL overrides are

@@ -119,9 +119,20 @@ All objects are strict: unknown keys are rejected, including inside endpoints, a
 - Endpoint status expectations must be integers from 100 through 599. Runtime methods are limited to `GET`, `HEAD`, and `OPTIONS`.
 - Names must be unique within each endpoint, page, viewport, and form-flow collection.
 - UI configuration requires exactly two distinctly named viewports.
+- UI analysis accepts at most 10 pages and five form flows. Every form flow requires one through 20 steps.
 - An endpoint, page, or form flow with `useAuthentication: true` requires the corresponding API or UI authentication block.
 
-API/UI base targets and timeouts drive one central, read-only reachability probe per configured service. Cached API reachability selects either live endpoint assertions or static OpenAPI fallback for the full scan. Live API checks may resolve configured header-authentication references for protected endpoints; missing values skip only those endpoints. Unauthenticated API endpoints and UI pages are also eligible for bounded Security header/CORS checks, while configured debug-like paths can contribute static debug-route evidence. Sentinel never resolves target authentication for Security requests. UI authentication, viewports, and form flows remain dormant until the Playwright milestone.
+API/UI base targets and timeouts drive one central, read-only reachability probe per configured service. Cached API reachability selects either live endpoint assertions or static OpenAPI fallback for the full scan. Live API checks may resolve configured header-authentication references for protected endpoints; missing values skip only those endpoints. Unauthenticated API endpoints and UI pages are also eligible for bounded Security header/CORS checks, while configured debug-like paths can contribute static debug-route evidence. Sentinel never resolves target authentication for Security requests.
+
+When the cached UI probe is reachable, one Playwright Chromium session consumes
+the configured pages, two viewports, optional authentication, and optional form
+flows. Header authentication is applied only to same-origin browser requests;
+storage-state files are handled by Playwright. Missing authentication or
+environment-backed form values skip only the affected protected target or flow.
+Each Playwright operation is bounded by `ui.timeoutMs` and the remaining
+browser-analysis budget.
+Chromium binaries remain an explicit `npx playwright install chromium` step and
+are not downloaded during `npm install`.
 
 ## Report Formats
 
