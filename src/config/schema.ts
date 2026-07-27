@@ -1,4 +1,4 @@
-import { resolve } from "node:path";
+import { extname, isAbsolute, relative, resolve, sep } from "node:path";
 
 import { z } from "zod";
 
@@ -136,6 +136,17 @@ function createFilesystemPathSchema(baseDirectory: string) {
     .transform((value) => resolve(baseDirectory, value));
 }
 
+function isPathInside(root: string, candidate: string): boolean {
+  const relativePath = relative(root, candidate);
+
+  return (
+    relativePath.length === 0 ||
+    (!isAbsolute(relativePath) &&
+      relativePath !== ".." &&
+      !relativePath.startsWith(`..${sep}`))
+  );
+}
+
 function addDuplicateNameIssues(
   items: readonly { name: string }[],
   path: string,
@@ -251,6 +262,10 @@ export function createSentinelConfigSchema(
   invocationDirectory = baseDirectory,
 ) {
   const filesystemPathSchema = createFilesystemPathSchema(baseDirectory);
+  const openApiPathSchema = filesystemPathSchema.refine(
+    (path) => [".json", ".yaml", ".yml"].includes(extname(path).toLowerCase()),
+    "Expected a .json, .yaml, or .yml OpenAPI file.",
+  );
   const defaultTargetRoot = resolve(invocationDirectory, DEFAULT_TARGET_ROOT);
   const defaultReportPath = resolve(invocationDirectory, DEFAULT_REPORT_PATH);
   const reportSchema = z
@@ -303,6 +318,7 @@ export function createSentinelConfigSchema(
     .strictObject({
       baseUrl: httpUrlSchema,
       healthPath: originRelativePathSchema,
+      openApiPath: openApiPathSchema,
       timeoutMs: positiveIntegerSchema,
       latencyThresholdMs: positiveIntegerSchema,
       authentication: headerAuthenticationSchema.optional(),
@@ -378,26 +394,39 @@ export function createSentinelConfigSchema(
       });
     });
 
-  return z.strictObject({
-    target: z
-      .strictObject({
-        root: filesystemPathSchema.default(defaultTargetRoot),
-      })
-      .default({
-        root: defaultTargetRoot,
+  return z
+    .strictObject({
+      target: z
+        .strictObject({
+          root: filesystemPathSchema.default(defaultTargetRoot),
+        })
+        .default({
+          root: defaultTargetRoot,
+        }),
+      report: reportSchema.default({
+        format: "markdown",
+        path: defaultReportPath,
       }),
-    report: reportSchema.default({
-      format: "markdown",
-      path: defaultReportPath,
-    }),
-    api: apiSchema.optional(),
-    ui: uiSchema.optional(),
-    ai: z
-      .discriminatedUnion("enabled", [disabledAiSchema, enabledAiSchema])
-      .default({
-        enabled: false,
-      }),
-  });
+      api: apiSchema.optional(),
+      ui: uiSchema.optional(),
+      ai: z
+        .discriminatedUnion("enabled", [disabledAiSchema, enabledAiSchema])
+        .default({
+          enabled: false,
+        }),
+    })
+    .superRefine((config, context) => {
+      if (
+        config.api !== undefined &&
+        !isPathInside(config.target.root, config.api.openApiPath)
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["api", "openApiPath"],
+          message: "OpenAPI path must remain inside the target root.",
+        });
+      }
+    });
 }
 
 export type SentinelConfig = z.output<

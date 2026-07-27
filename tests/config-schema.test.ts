@@ -17,6 +17,7 @@ function validConfig(): Record<string, unknown> {
     api: {
       baseUrl: "http://127.0.0.1:4321",
       healthPath: "/health",
+      openApiPath: "./target/openapi.json",
       timeoutMs: 2_000,
       latencyThresholdMs: 500,
       authentication: {
@@ -119,6 +120,10 @@ test("full target configuration validates and normalizes filesystem paths", () =
   );
   assert.equal(config.report.format, "markdown");
   assert.equal(config.api?.baseUrl, "http://127.0.0.1:4321");
+  assert.equal(
+    config.api?.openApiPath,
+    resolve(BASE_DIRECTORY, "target/openapi.json"),
+  );
   assert.equal(config.ui?.authentication?.kind, "storageState");
   if (config.ui?.authentication?.kind === "storageState") {
     assert.equal(
@@ -268,6 +273,17 @@ test("schema rejects invalid target URLs, paths, methods, and thresholds", () =>
   const invalidThreshold = structuredClone(validConfig());
   (invalidThreshold.api as Record<string, unknown>).latencyThresholdMs = 3_000;
 
+  const invalidOpenApiExtension = structuredClone(validConfig());
+  (invalidOpenApiExtension.api as Record<string, unknown>).openApiPath =
+    "./target/openapi.txt";
+
+  const missingOpenApiPath = structuredClone(validConfig());
+  delete (missingOpenApiPath.api as Record<string, unknown>).openApiPath;
+
+  const escapedOpenApiPath = structuredClone(validConfig());
+  (escapedOpenApiPath.api as Record<string, unknown>).openApiPath =
+    "./outside/openapi.json";
+
   const invalidTimeout = structuredClone(validConfig());
   (invalidTimeout.ui as Record<string, unknown>).timeoutMs = 0;
 
@@ -283,6 +299,9 @@ test("schema rejects invalid target URLs, paths, methods, and thresholds", () =>
     issuePaths(invalidStatus).includes("api.endpoints.0.expectedStatus"),
   );
   assert.ok(issuePaths(invalidThreshold).includes("api.latencyThresholdMs"));
+  assert.ok(issuePaths(invalidOpenApiExtension).includes("api.openApiPath"));
+  assert.ok(issuePaths(missingOpenApiPath).includes("api.openApiPath"));
+  assert.ok(issuePaths(escapedOpenApiPath).includes("api.openApiPath"));
   assert.ok(issuePaths(invalidTimeout).includes("ui.timeoutMs"));
 });
 

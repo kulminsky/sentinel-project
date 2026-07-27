@@ -69,8 +69,9 @@ test("scanProject emits deterministic repository and coverage rows", async () =>
         "security.headers",
         "security.debug-endpoints",
         "api.service-availability",
+        "api.runtime-contract",
+        "api.openapi-fallback",
         "ai.api-test-gap",
-        "api.coverage",
         "ui.service-availability",
         "ui.coverage",
       ],
@@ -84,7 +85,7 @@ test("scanProject emits deterministic repository and coverage rows", async () =>
       report.results
         .filter((result) => result.diagnosticCode === "LEVEL_NOT_IMPLEMENTED")
         .map((result) => result.checkId),
-      ["api.coverage", "ui.coverage"],
+      ["ui.coverage"],
     );
   });
 });
@@ -112,7 +113,7 @@ test("renderMarkdownReport includes the required result fields and summary", asy
 
     assert.match(markdown, /## Overall Summary/);
     assert.match(markdown, /\*\*Status counts:\*\* Pass 3/);
-    assert.match(markdown, /Skipped 12/);
+    assert.match(markdown, /Skipped 13/);
     assert.match(markdown, /\*\*Status:\*\* Pass/);
     assert.match(markdown, /\*\*Duration:\*\* \d+ ms/);
     assert.match(markdown, /\*\*Finding:\*\*/);

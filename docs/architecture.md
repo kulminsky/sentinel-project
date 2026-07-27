@@ -20,8 +20,8 @@ The design favors plain functions, fixed check registration, explicit boundaries
 The repository currently includes a standalone Express and TypeScript sample
 target with its own manifest and lockfile. Root installation installs it with
 package scripts disabled, while its process remains explicitly controlled by
-the reviewer. Its Security evidence is consumed by implemented checks; its
-seeded API and UI flaws remain fixtures for future milestones.
+the reviewer. Its Security and API evidence is consumed by implemented checks;
+its seeded UI flaws remain fixtures for the future browser milestone.
 
 ## Approved Architecture
 
@@ -80,7 +80,7 @@ Sentinel then probes only configured API and UI targets:
 
 After probing, Code & Repository, Security, API / Backend, and UI / Browser groups start concurrently. Checks remain sequential within a level. The runner preserves level and registration order, enforces each check timeout with an abort signal, and converts a timeout or exception into one isolated `Skipped / Info` diagnostic row.
 
-Security checks consume the cached observations before making bounded requests to configured unauthenticated endpoints or pages. Unavailable APIs receive static fallback analysis when that milestone is implemented; reachable UIs receive Playwright checks when browser automation is implemented.
+Security checks consume the cached observations before making bounded requests to configured unauthenticated endpoints or pages. Cached API reachability exclusively selects live contract/latency analysis or static OpenAPI fallback. Reachable UIs receive Playwright checks when browser automation is implemented.
 
 Sentinel never scans localhost ports and never starts, stops, or restarts target services.
 
@@ -138,7 +138,7 @@ The production AI redaction milestone will register only explicitly referenced v
 
 Rule customization, custom secret-pattern languages, and per-check plugin configuration are outside the MVP.
 
-API/UI base targets and timeouts drive central reachability probing. Unauthenticated endpoints and pages are also consumed by Security header/CORS observations, and configured debug-like paths contribute debug-route evidence. Target authentication values are never resolved for these checks. Endpoint assertions, viewports, and form flows remain dormant until their API and Playwright milestones. The complete implemented contract is documented in `docs/configuration.md`.
+API/UI base targets and timeouts drive central reachability probing. API configuration also supplies one target-contained OpenAPI file, read-only endpoints, expectations, and optional header-authentication references for implemented API analysis. Unauthenticated endpoints and pages are consumed by Security header/CORS observations, and configured debug-like paths contribute debug-route evidence; Security never resolves target authentication. UI authentication, viewports, and form flows remain dormant until the Playwright milestone. The complete implemented contract is documented in `docs/configuration.md`.
 
 ## Repository Analysis Boundary
 
@@ -161,7 +161,7 @@ Dependency freshness runs one read-only, non-scripted `npm outdated --json --lon
 
 An incomplete inventory never becomes a false absence warning. Positive evidence remains usable, while an affected absence-based check returns `Skipped / Info` and marks the report incomplete. Repository evidence contains only relative paths, recognized configuration names, and validated package/version metadata; raw file contents, command errors, registry configuration, and credentials are not rendered.
 
-API contract/runtime and UI browser coverage remain explicitly represented by `Skipped / Info` placeholder rows until their milestones are implemented. Existing Security checks, API/UI availability, and synthetic AI behavior remain active.
+API contract/runtime analysis is implemented. UI browser coverage remains explicitly represented by a `Skipped / Info` placeholder row until its milestone is implemented. Existing Security checks, API/UI availability, and synthetic AI behavior remain active.
 
 ## Security Analysis Boundary
 
@@ -212,10 +212,10 @@ Sentinel should produce the most complete report possible:
 | Condition                                                            | Behavior                                                                               |
 | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | No config or runtime URLs                                            | Scan the current directory statically; skip affected runtime checks.                   |
-| API unavailable                                                      | Emit a normal availability note; run static API fallback when implemented.             |
+| API unavailable                                                      | Emit a normal availability note and run only static OpenAPI fallback.                  |
 | UI unavailable                                                       | Emit a normal availability note and skip future browser checks.                        |
 | Authentication absent                                                | Run public checks and skip only protected expectations.                                |
-| OpenAPI invalid                                                      | Warn and attempt best-effort route/schema fallback.                                    |
+| OpenAPI invalid                                                      | Warn without claiming runtime shape coverage; source-route fallback remains pending.   |
 | Repository inventory bounded or partially unreadable                 | Preserve positive evidence; skip affected absence claims and mark the scan incomplete. |
 | npm freshness query unavailable                                      | Skip freshness analysis without failing or marking the scan incomplete.                |
 | `package-lock.json` or npm audit unavailable                         | Skip vulnerability lookup; never claim the project is clean.                           |
@@ -233,12 +233,16 @@ The CLI returns a nonzero exit code only for fatal tool errors. Target findings,
 
 OpenAPI support is deliberately shallow:
 
-- Parse OpenAPI 3.0/3.1 JSON or YAML documents.
-- Inventory operations and select configured or safe `GET`, `HEAD`, and `OPTIONS` endpoints.
-- Check expected status, content type, JSON parseability, and configured or top-level required fields.
-- Treat route-source discovery as best-effort and visibly incomplete.
+- Require one explicit, target-contained `api.openApiPath`; Sentinel never guesses a filename or fetches the contract from the service.
+- Parse bounded OpenAPI 3.0/3.1 JSON or YAML documents through the symlink-safe repository boundary.
+- Use cached reachability to select one mode for the scan. Reachable APIs receive only live analysis; unavailable APIs receive only static fallback.
+- Request at most 12 configured `GET`, `HEAD`, or `OPTIONS` endpoints sequentially, once each, without following redirects.
+- Check configured and documented status, content type, JSON parseability, supported top-level JSON response type, required fields, direct property types, and latency to response headers. Schema types follow the declared OpenAPI 3.0/3.1 dialect; OpenAPI 3.0 arrays remain a visible limitation because their required nested `items` schema is outside the shallow validator. Matched non-JSON schemas produce a visible limitation rather than an unverified shape pass.
+- Limit response bodies to 256 KiB and preserve completed findings when an endpoint, body, or internal deadline bound limits coverage.
 
-Deep schema composition, comprehensive `$ref` resolution, generated payloads, and complete contract validation are outside scope.
+The inactive mode emits one explicit skipped result. Endpoint transport failures after a successful central probe never trigger fallback during that scan. Missing authentication references skip only the affected endpoint, and target credentials are used only as request headers.
+
+Deep schema composition, comprehensive `$ref` resolution, generated payloads, source-route discovery, and complete contract validation are outside the implemented boundary.
 
 All runtime API checks are read-only. Sentinel does not issue `POST`, `PUT`, `PATCH`, or `DELETE` requests.
 
@@ -308,6 +312,7 @@ Required unit tests focus on:
 - Secret detector coverage and proof that matched values never enter results.
 - Environment-file ignore hygiene, runtime header/CORS policy, and evidence-derived debug routes.
 - Safe endpoint selection and shallow response expectations.
+- Exclusive live/static API mode selection, bounded response handling, and per-endpoint latency.
 - AI response and citation validation.
 
 Required integration tests cover:
@@ -332,7 +337,7 @@ sample run remains mandatory.
 2. Perform an early AI risk spike using one fixture, explicit OpenAI and Claude adapters, one selected-provider request, and one cited structured result.
 3. Implement configuration, the isolated concurrent runner, redaction, inventory, stack detection, and generic repository checks. Configuration, the runner, inventory, detection, and repository checks are complete; production AI evidence redaction remains pending.
 4. Add secret detection and npm-only vulnerability analysis. This milestone is complete.
-5. Add service probes, shallow OpenAPI fallback, and safe API/security runtime checks. Central reachability and Security runtime observations are complete; API fallback and assertions are pending.
+5. Add service probes, shallow OpenAPI fallback, and safe API/security runtime checks. This milestone is complete.
 6. Add the Playwright lifecycle and required browser checks.
 7. Harden the synthetic AI check behind a provider-neutral, one-call, fail-closed client and preserve no-AI behavior. This milestone is complete; production evidence selection and redaction remain pending.
 8. Harden tests, generate the demo report, complete the README, and assemble

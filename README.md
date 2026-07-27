@@ -8,7 +8,7 @@ Deliver a polished, reviewable MVP that demonstrates deliberate quality-engineer
 
 ## Current Status
 
-**Foundation, AI feasibility, tooling, configuration, concurrent-runner, validated-reporting, repository-analysis, Security-analysis, and reproducible-demo-target milestones complete.**
+**Foundation, AI feasibility, tooling, configuration, concurrent-runner, validated-reporting, repository-analysis, Security-analysis, API-analysis, and reproducible-demo-target milestones complete.**
 
 Sentinel currently:
 
@@ -22,7 +22,8 @@ Sentinel currently:
 - Checks `.gitignore` coverage, code-style configuration, tests, CI, TypeScript strictness, dependency freshness, lockfiles, and README quality.
 - Audits root npm lockfiles, detects high-confidence secrets without reporting their values, and checks `.env` ignore hygiene.
 - Uses configured unauthenticated targets for bounded security-header, CORS, and evidence-derived debug-endpoint observations.
-- Reports explicit `Skipped / Info` coverage rows for unfinished API and UI analysis.
+- Exclusively selects live API contract/latency analysis or static OpenAPI fallback from the cached API reachability result.
+- Reports an explicit `Skipped / Info` coverage row for unfinished UI analysis.
 - Runs or gracefully skips one synthetic semantic API test-gap check through a provider-neutral typed client.
 - Supports explicit OpenAI or Claude selection while keeping vendor envelopes out of check logic.
 - Uses native schema-constrained output, validates it locally, and fails closed on every unrecognized response.
@@ -31,12 +32,12 @@ Sentinel currently:
 - Includes one normalized Overall Summary with complete status/severity counts and a deterministic narrative.
 - Returns a nonzero exit code only when configuration cannot be loaded, the scan cannot run, or the selected report cannot be rendered or written.
 
-API assertions, static API fallback, Playwright browser automation, production AI evidence selection, entropy scanning, and Git-history scanning are not implemented yet. API endpoints and UI pages now support unauthenticated Security observations; endpoint assertions, authentication values, viewports, and form flows remain dormant. The Playwright library is installed for the planned browser milestone, but browser binaries are intentionally not installed.
+Playwright browser automation, production AI evidence selection, source-route fallback, entropy scanning, and Git-history scanning are not implemented yet. Configured API endpoints and header-authentication references are consumed by API analysis; UI authentication values, viewports, and form flows remain dormant. The Playwright library is installed for the planned browser milestone, but browser binaries are intentionally not installed.
 
 The repository also contains a runnable, deliberately flawed Express and
-TypeScript target under `sample-app/`. Sentinel now consumes its Security
-evidence; the seeded API and UI flaws remain fixtures for unfinished
-milestones.
+TypeScript target under `sample-app/`. Sentinel now consumes its Security and
+API evidence; the seeded UI flaws remain fixtures for the unfinished browser
+milestone.
 
 ## Development Setup
 
@@ -112,8 +113,8 @@ The fixture intentionally includes:
 
 Health, catalog behavior, non-public CORS behavior, responsive layout, and the
 configured client-side form flow remain correct so the eventual report contains
-meaningful passes as well as findings. Security checks are implemented; the
-detailed API and browser checks remain planned. See
+meaningful passes as well as findings. Security and API checks are implemented;
+the browser checks remain planned. See
 [`sample-app/README.md`](sample-app/README.md) for the fixture contract.
 
 ## Configuration
@@ -128,7 +129,7 @@ npm start -- --config ./path/to/sentinel.config.json
 
 Configuration is recursively strict. Invalid values, incomplete supplied sections, and unknown keys stop the scan with a property-specific error; Sentinel never silently replaces invalid configuration with defaults.
 
-See [`docs/configuration.md`](docs/configuration.md) for the complete JSON contract, environment mappings, precedence, path resolution, and credential-reference rules. API/UI targets and timeouts support central reachability probing and unauthenticated Security observations; API assertions and browser behavior are not executed yet.
+See [`docs/configuration.md`](docs/configuration.md) for the complete JSON contract, environment mappings, precedence, path resolution, and credential-reference rules. API configuration drives central reachability, exclusive live/static contract analysis, and unauthenticated Security observations. UI browser behavior is not executed yet.
 
 ## Report Output
 
@@ -173,6 +174,36 @@ secret values. Missing npm, registry access, runtime configuration, or service
 availability produces a substantive skipped note. Invalid purported audit
 output and bounded-coverage limitations cannot earn a clean pass and mark the
 report incomplete where the result is not trustworthy.
+
+## API / Backend Analysis
+
+Every configured API supplies an explicit target-contained `openApiPath`.
+Sentinel uses the cached reachability result to select exactly one contract
+mode:
+
+- A reachable API receives sequential, read-only requests to at most 12
+  configured `GET`, `HEAD`, or `OPTIONS` endpoints. Each endpoint produces one
+  combined status, shallow OpenAPI shape, configured-field, and response-header
+  latency result from a single request.
+- An unreachable API receives static OpenAPI 3.0/3.1 JSON or YAML analysis.
+  Sentinel checks configured endpoint alignment without claiming live status,
+  response, or latency coverage.
+
+The inactive mode emits one `Skipped / Info` note. A service that disappears
+after the central probe does not switch modes mid-scan. Runtime responses are
+limited to 256 KiB, authenticated endpoints resolve only configured header
+environment references, redirects are not followed, and credentials, response
+bodies, query values, header values, parser errors, and absolute paths are not
+rendered.
+
+OpenAPI validation is deliberately shallow and JSON-focused: top-level response
+type, required fields, and direct property types are supported for JSON
+responses. A matched non-JSON response schema produces a visible limitation
+instead of an unearned shape pass. Schema types follow the declared OpenAPI
+3.0/3.1 dialect; OpenAPI 3.0 arrays remain a visible limitation because their
+required nested `items` schema is outside this shallow validator. Deep
+composition, comprehensive `$ref` resolution, generated payloads, unsafe
+methods, and source-route discovery remain out of scope.
 
 ## Synthetic AI Feasibility Check
 
@@ -254,7 +285,7 @@ This list describes the approved implementation target, not functionality curren
 2. **Complete:** Validate the bounded multi-provider AI approach with an early synthetic risk spike.
 3. **In progress:** Configuration, the runner, inventory, stack detection, and repository checks are complete; production AI evidence redaction remains pending.
 4. **Complete:** Add high-confidence secret detection, `.env` hygiene, and npm-only vulnerability analysis.
-5. **In progress:** Service reachability and Security runtime observations are complete; shallow API fallback and assertions remain pending.
+5. **Complete:** Add service reachability, Security runtime observations, shallow OpenAPI fallback, and read-only API contract/latency assertions.
 6. Add the Playwright lifecycle and required browser checks.
 7. **Complete for the synthetic spike:** Harden provider-neutral, fail-closed AI execution and no-AI behavior; production evidence selection and redaction remain pending.
 8. **In progress:** The reproducible demo target is complete; harden remaining tests and complete the sample report, documentation, and process evidence.
@@ -280,6 +311,9 @@ The repository currently contains the foundation implementation and its document
 │   │   ├── openai.ts
 │   │   └── provider.ts
 │   ├── checks/
+│   │   ├── api/
+│   │   │   ├── checks.ts
+│   │   │   └── openapi.ts
 │   │   ├── repository/
 │   │   │   ├── common.ts
 │   │   │   ├── node.ts
@@ -327,6 +361,7 @@ The repository currently contains the foundation implementation and its document
 │   ├── support/
 │   │   └── fake-ai-provider.ts
 │   ├── ai-check.test.ts
+│   ├── api-analysis.test.ts
 │   ├── ai-config.test.ts
 │   ├── ai-provider.test.ts
 │   ├── cli.test.ts
@@ -378,8 +413,8 @@ For each milestone:
 - **Tooling — complete:** reproducible npm setup, CLI/config libraries, Vitest, linting, formatting, and CI checks; Playwright browser installation remains deferred.
 - **Configuration — complete:** strict JSON and environment loading, normalized target/report paths, source precedence, and fatal path-specific validation.
 - **Core runner — complete:** four concurrent analysis-level groups, sequential per-level checks, per-check timeouts, isolated failures, and deterministic ordering.
-- **Static analysis — in progress:** bounded inventory, Node/TypeScript detection, repository checks, npm audit, high-confidence secret detection, and `.env` hygiene are complete; API fallback remains planned.
-- **Runtime analysis — in progress:** centralized API/UI reachability plus unauthenticated header, CORS, and debug-endpoint observations are complete; API assertions and Playwright checks remain planned.
+- **Static analysis — in progress:** bounded inventory, Node/TypeScript detection, repository checks, npm audit, high-confidence secret detection, `.env` hygiene, and static OpenAPI fallback are implemented; source-route fallback remains pending.
+- **Runtime analysis — in progress:** centralized API/UI reachability, unauthenticated header/CORS/debug observations, and read-only API contract/latency checks are complete; Playwright checks remain planned.
 - **AI analysis:** provider-neutral, fail-closed synthetic multi-provider execution is complete and the OpenAI path has been manually verified; live Claude verification plus production evidence selection and redaction remain planned.
 - **Submission readiness — in progress:** the standalone demo target is complete;
   the final sample report, remaining documentation, and process evidence are
@@ -394,7 +429,7 @@ This README should grow with implemented behavior rather than describe planned f
 | Foundation                       | Completed: Current Status, Development Setup, Project Structure, and the first verified command now reflect the implementation.                                   |
 | Validated reporting              | Completed: Current Status, Configuration, report behavior, model invariants, and Project Structure reflect all three implemented formats.                         |
 | Repository and security analysis | Completed: Current Status, Repository Analysis, Security Analysis, Project Structure, and limitations reflect implemented behavior.                               |
-| API runtime and fallback         | Update MVP Scope and Project Structure; document verified runtime prerequisites and degradation behavior.                                                         |
+| API runtime and fallback         | Completed: Current Status, Configuration, API / Backend Analysis, Project Structure, roadmap, and degradation behavior reflect the implementation.                |
 | Playwright                       | Update MVP Scope; document supported browser checks and any verified limitations.                                                                                 |
 | AI feasibility spike             | Completed: Current Status, Development Setup, Project Structure, provider behavior, synthetic data handling, limits, and fallback now reflect the implementation. |
 | Production AI integration        | Replace synthetic-only guidance with verified evidence selection, redaction, configuration, and sample-report behavior.                                           |

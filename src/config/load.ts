@@ -15,6 +15,7 @@ const STRING_ENVIRONMENT_MAPPINGS = [
   ["SENTINEL_REPORT_PATH", ["report", "path"]],
   ["SENTINEL_API_BASE_URL", ["api", "baseUrl"]],
   ["SENTINEL_API_HEALTH_PATH", ["api", "healthPath"]],
+  ["SENTINEL_API_OPENAPI_PATH", ["api", "openApiPath"]],
   ["SENTINEL_UI_BASE_URL", ["ui", "baseUrl"]],
   ["SENTINEL_AI_PROVIDER", ["ai", "provider"]],
 ] as const;

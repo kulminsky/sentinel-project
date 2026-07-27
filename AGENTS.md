@@ -9,6 +9,7 @@ These instructions apply to the entire repository.
 - Do not expand supported stacks, the approved Markdown/JSON/terminal report formats, providers, browsers, or runtime behavior without explicit approval.
 - Never hardcode target URLs, ports, filesystem paths, endpoint parameters, credentials, or authentication values.
 - Preserve centralized setup, cached reachability, concurrent analysis-level execution, and graceful degradation. Checks remain sequential within each level; missing services or optional credentials must not crash a scan.
+- Preserve exclusive API mode selection: cached API reachability enables either live contract checks or static OpenAPI fallback, never both in one scan.
 - Keep all browser automation in Playwright.
 - Keep runtime API checks read-only and never start target services.
 - Never include repository or target secrets in prompts, request bodies, response evidence, reports, logs, or persisted evidence without redaction.

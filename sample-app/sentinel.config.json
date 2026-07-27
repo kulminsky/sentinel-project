@@ -9,6 +9,7 @@
   "api": {
     "baseUrl": "http://127.0.0.1:4310",
     "healthPath": "/health",
+    "openApiPath": "./openapi.json",
     "timeoutMs": 2000,
     "latencyThresholdMs": 250,
     "endpoints": [

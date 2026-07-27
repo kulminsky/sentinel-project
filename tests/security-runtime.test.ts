@@ -62,6 +62,7 @@ function runtimeConfig(
     api: {
       baseUrl: options.apiBaseUrl ?? "https://api.example.test",
       healthPath: "/health",
+      openApiPath: "./openapi.json",
       timeoutMs,
       latencyThresholdMs: Math.min(timeoutMs, 50),
       ...(options.apiAuthentication === true

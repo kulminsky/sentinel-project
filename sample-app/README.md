@@ -21,7 +21,15 @@ npm run sample:scan
 ```
 
 The scan writes the ignored local file `sample-app/sentinel-report.md`. Sentinel
-does not start or stop this process.
+does not start or stop this process. With the service running, API analysis
+checks each configured endpoint once: catalog and public-feed contract checks
+pass, profile fails because the live body omits OpenAPI-required `plan`, and the
+slow endpoint exceeds the configured latency threshold. Static fallback is
+explicitly skipped.
+
+If the service is stopped, the same scan performs no endpoint requests. Live
+analysis is skipped and the configured `openapi.json` receives static contract
+alignment analysis instead.
 
 Use `SENTINEL_SAMPLE_HOST` or `SENTINEL_SAMPLE_PORT` only when the default
 loopback binding is unavailable. Matching Sentinel API and UI URL overrides are

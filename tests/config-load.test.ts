@@ -22,6 +22,7 @@ function validApiConfig(): Record<string, unknown> {
   return {
     baseUrl: "https://api.file.example.test",
     healthPath: "/health",
+    openApiPath: "./openapi.json",
     timeoutMs: 2_000,
     latencyThresholdMs: 500,
     endpoints: [
@@ -193,7 +194,10 @@ test("process environment overrides .env, which overrides JSON", async () => {
           format: "json",
           path: "./json-report.json",
         },
-        api: validApiConfig(),
+        api: {
+          ...validApiConfig(),
+          openApiPath: "./json-target/openapi.json",
+        },
         ai: {
           enabled: false,
           provider: "claude",
@@ -208,6 +212,7 @@ test("process environment overrides .env, which overrides JSON", async () => {
         "SENTINEL_REPORT_FORMAT=markdown",
         "SENTINEL_REPORT_PATH=./dotenv-report.md",
         "SENTINEL_API_BASE_URL=https://api.dotenv.example.test",
+        "SENTINEL_API_OPENAPI_PATH=./dotenv-target/openapi.yaml",
         "SENTINEL_AI_ENABLED=true",
         "SENTINEL_AI_PROVIDER=claude",
       ].join("\n"),
@@ -221,6 +226,7 @@ test("process environment overrides .env, which overrides JSON", async () => {
         SENTINEL_REPORT_FORMAT: "json",
         SENTINEL_REPORT_PATH: "./process-report.json",
         SENTINEL_API_BASE_URL: "https://api.process.example.test:9443",
+        SENTINEL_API_OPENAPI_PATH: "./process-target/openapi.yml",
         SENTINEL_AI_PROVIDER: "openai",
       },
     });
@@ -234,6 +240,10 @@ test("process environment overrides .env, which overrides JSON", async () => {
     assert.equal(
       loaded.config.api?.baseUrl,
       "https://api.process.example.test:9443",
+    );
+    assert.equal(
+      loaded.config.api?.openApiPath,
+      join(directory, "process-target", "openapi.yml"),
     );
     assert.deepEqual(loaded.config.ai, {
       enabled: true,
@@ -250,6 +260,7 @@ test("structured environment values populate every API and UI collection", async
       environment: {
         SENTINEL_API_BASE_URL: "https://api.environment.example.test",
         SENTINEL_API_HEALTH_PATH: "/ready",
+        SENTINEL_API_OPENAPI_PATH: "./openapi.json",
         SENTINEL_API_TIMEOUT_MS: "2500",
         SENTINEL_API_LATENCY_THRESHOLD_MS: "400",
         SENTINEL_API_AUTHENTICATION: JSON.stringify({

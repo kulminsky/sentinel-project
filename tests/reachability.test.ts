@@ -21,6 +21,7 @@ function runtimeConfig(directory: string, timeoutMs = 100) {
     api: {
       baseUrl: "https://api.example.test:8443",
       healthPath: "/health",
+      openApiPath: "./openapi.json",
       timeoutMs,
       latencyThresholdMs: Math.min(timeoutMs, 50),
       endpoints: [],

@@ -36,16 +36,6 @@ function createCoverageCheck(metadata: CoverageMetadata): Check {
   };
 }
 
-export const apiCoverageCheck = createCoverageCheck({
-  id: "api.coverage",
-  title: "API / Backend analysis coverage",
-  level: "API / Backend",
-  finding:
-    "API contract and runtime assertion checks are not implemented in the current milestone.",
-  recommendation:
-    "Implement the approved shallow OpenAPI fallback and read-only API assertion milestone.",
-});
-
 export const uiCoverageCheck = createCoverageCheck({
   id: "ui.coverage",
   title: "UI / Browser analysis coverage",

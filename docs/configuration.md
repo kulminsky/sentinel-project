@@ -27,6 +27,7 @@ All objects are strict: unknown keys are rejected, including inside endpoints, a
   "api": {
     "baseUrl": "https://api.example.test:8443",
     "healthPath": "/health",
+    "openApiPath": "./demo-project/openapi.yaml",
     "timeoutMs": 3000,
     "latencyThresholdMs": 750,
     "authentication": {
@@ -109,7 +110,8 @@ All objects are strict: unknown keys are rejected, including inside endpoints, a
 
 ## Validation Rules
 
-- Filesystem paths must be nonempty and cannot contain NUL bytes. Explicit relative target, report, and storage-state paths resolve from the selected configuration directory; omitted clean-run target and Markdown report values remain anchored to the invocation directory.
+- Filesystem paths must be nonempty and cannot contain NUL bytes. Explicit relative target, report, OpenAPI, and storage-state paths resolve from the selected configuration directory; omitted clean-run target and Markdown report values remain anchored to the invocation directory.
+- A supplied API section requires `openApiPath`. It must end in `.json`, `.yaml`, or `.yml`, remain inside `target.root`, and resolve to an inventoried regular file before analysis can read it.
 - Report format is `markdown`, `json`, or `terminal`. Markdown may omit its path and use the clean-run default, JSON requires an explicit path, and terminal forbids a path because it writes only to stdout.
 - API and UI base URLs must use HTTP or HTTPS. Explicit ports are allowed; embedded credentials and fragments are not.
 - API health paths, endpoint paths, UI page paths, form start paths, `goto` paths, and `assertUrl` paths must be same-origin paths beginning with exactly one `/`. Absolute URLs, backslashes, control characters, and fragments are rejected.
@@ -119,7 +121,7 @@ All objects are strict: unknown keys are rejected, including inside endpoints, a
 - UI configuration requires exactly two distinctly named viewports.
 - An endpoint, page, or form flow with `useAuthentication: true` requires the corresponding API or UI authentication block.
 
-API/UI base targets and timeouts drive one central, read-only reachability probe per configured service. Unauthenticated API endpoints and UI pages are also eligible for bounded Security header/CORS checks, while configured debug-like paths can contribute static debug-route evidence. Sentinel never resolves target authentication for Security requests. Endpoint assertions, authentication values, viewports, and form flows remain dormant until their API and Playwright milestones.
+API/UI base targets and timeouts drive one central, read-only reachability probe per configured service. Cached API reachability selects either live endpoint assertions or static OpenAPI fallback for the full scan. Live API checks may resolve configured header-authentication references for protected endpoints; missing values skip only those endpoints. Unauthenticated API endpoints and UI pages are also eligible for bounded Security header/CORS checks, while configured debug-like paths can contribute static debug-route evidence. Sentinel never resolves target authentication for Security requests. UI authentication, viewports, and form flows remain dormant until the Playwright milestone.
 
 ## Report Formats
 
@@ -164,6 +166,7 @@ Scalar variables:
 | `SENTINEL_REPORT_PATH`              | `report.path`            |
 | `SENTINEL_API_BASE_URL`             | `api.baseUrl`            |
 | `SENTINEL_API_HEALTH_PATH`          | `api.healthPath`         |
+| `SENTINEL_API_OPENAPI_PATH`         | `api.openApiPath`        |
 | `SENTINEL_API_TIMEOUT_MS`           | `api.timeoutMs`          |
 | `SENTINEL_API_LATENCY_THRESHOLD_MS` | `api.latencyThresholdMs` |
 | `SENTINEL_UI_BASE_URL`              | `ui.baseUrl`             |
@@ -188,6 +191,6 @@ Report format and path follow the same precedence as other values. A higher-prec
 
 ## Credentials
 
-Configuration stores environment-variable references, never target credential values. AI continues to read only `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` for the selected provider. Missing optional credentials skip only the affected check.
+Configuration stores environment-variable references, never target credential values. Live API checks resolve referenced header values only for endpoints that request authentication and never render them; missing values skip only the affected endpoint. AI continues to read only `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` for the selected provider. Missing optional provider credentials skip only the AI check.
 
 Never commit real credentials to JSON, `.env`, tests, or documentation.

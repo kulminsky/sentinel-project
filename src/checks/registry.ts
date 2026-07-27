@@ -1,6 +1,10 @@
 import { syntheticAiCheck } from "../ai/check.js";
 import type { Check } from "../core/check.js";
-import { apiCoverageCheck, uiCoverageCheck } from "./coverage.js";
+import {
+  apiRuntimeContractCheck,
+  apiStaticOpenApiCheck,
+} from "./api/checks.js";
+import { uiCoverageCheck } from "./coverage.js";
 import {
   repositoryDependencyFreshnessCheck,
   repositoryLockfileCheck,
@@ -38,8 +42,9 @@ export const CHECKS: readonly Check[] = [
   securityHeadersCheck,
   securityDebugEndpointsCheck,
   apiAvailabilityCheck,
+  apiRuntimeContractCheck,
+  apiStaticOpenApiCheck,
   syntheticAiCheck,
-  apiCoverageCheck,
   uiAvailabilityCheck,
   uiCoverageCheck,
 ];
