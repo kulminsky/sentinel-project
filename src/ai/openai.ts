@@ -1,107 +1,86 @@
 import {
+  isRecord,
+  parseStructuredValue,
   postJson,
-  readTokenCount,
-  type AiProvider,
-  type AiProviderOutcome,
+  readUsage,
+  type AiTransport,
+  type AiTransportOutcome,
   type FetchLike,
 } from "./provider.js";
 
 const OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions";
 const OPENAI_MODEL = "gpt-5.6-luna";
 
-function readOpenAiOutcome(body: unknown): AiProviderOutcome {
-  if (typeof body !== "object" || body === null || Array.isArray(body)) {
-    return {
-      ok: false,
-      diagnosticCode: "AI_PROVIDER_ERROR",
-    };
+function unavailable(
+  diagnosticCode: Extract<
+    AiTransportOutcome,
+    { state: "unavailable" }
+  >["diagnosticCode"],
+): AiTransportOutcome {
+  return {
+    state: "unavailable",
+    diagnosticCode,
+  };
+}
+
+function readOpenAiOutcome(body: unknown): AiTransportOutcome {
+  if (!isRecord(body) || !Array.isArray(body.choices)) {
+    return unavailable("AI_RESPONSE_UNRECOGNIZED");
   }
 
-  const response = body as Record<string, unknown>;
-  const choices = response.choices;
-  const usage =
-    typeof response.usage === "object" &&
-    response.usage !== null &&
-    !Array.isArray(response.usage)
-      ? (response.usage as Record<string, unknown>)
-      : undefined;
-
-  if (!Array.isArray(choices) || choices.length !== 1) {
-    return {
-      ok: false,
-      diagnosticCode: "AI_PROVIDER_ERROR",
-    };
+  if (body.choices.length !== 1) {
+    return unavailable("AI_RESPONSE_UNRECOGNIZED");
   }
 
-  const choice: unknown = choices[0];
-  if (typeof choice !== "object" || choice === null || Array.isArray(choice)) {
-    return {
-      ok: false,
-      diagnosticCode: "AI_PROVIDER_ERROR",
-    };
+  const choice: unknown = body.choices[0];
+  if (!isRecord(choice) || !isRecord(choice.message)) {
+    return unavailable("AI_RESPONSE_UNRECOGNIZED");
   }
 
-  const finishReason = (choice as Record<string, unknown>).finish_reason;
-  const message = (choice as Record<string, unknown>).message;
+  const finishReason = choice.finish_reason;
+  const refusal = choice.message.refusal;
 
-  if (
-    typeof message !== "object" ||
-    message === null ||
-    Array.isArray(message)
-  ) {
-    return {
-      ok: false,
-      diagnosticCode: "AI_PROVIDER_ERROR",
-    };
-  }
-
-  const messageRecord = message as Record<string, unknown>;
-  if (
-    typeof messageRecord.refusal === "string" ||
-    finishReason === "content_filter"
-  ) {
-    return {
-      ok: false,
-      diagnosticCode: "AI_PROVIDER_REFUSAL",
-    };
+  if (finishReason === "content_filter" || typeof refusal === "string") {
+    return unavailable("AI_PROVIDER_REFUSAL");
   }
 
   if (finishReason === "length") {
-    return {
-      ok: false,
-      diagnosticCode: "AI_PROVIDER_TRUNCATED",
-    };
+    return unavailable("AI_PROVIDER_TRUNCATED");
   }
 
-  if (finishReason !== "stop" || typeof messageRecord.content !== "string") {
-    return {
-      ok: false,
-      diagnosticCode: "AI_PROVIDER_ERROR",
-    };
+  if (finishReason !== "stop" || (refusal !== undefined && refusal !== null)) {
+    return unavailable("AI_RESPONSE_UNRECOGNIZED");
   }
 
-  const inputTokens = readTokenCount(usage?.prompt_tokens);
-  const outputTokens = readTokenCount(usage?.completion_tokens);
+  const structured = parseStructuredValue(choice.message.content);
+  const usage = readUsage(body.usage, "prompt_tokens", "completion_tokens");
+  if (structured.state === "unavailable" || usage.state === "unavailable") {
+    return unavailable("AI_RESPONSE_UNRECOGNIZED");
+  }
 
   return {
-    ok: true,
-    response: {
-      content: messageRecord.content,
+    state: "available",
+    value: structured.value,
+    provenance: {
       provider: "openai",
       model: OPENAI_MODEL,
-      ...(inputTokens === undefined ? {} : { inputTokens }),
-      ...(outputTokens === undefined ? {} : { outputTokens }),
+      ...(usage.inputTokens === undefined
+        ? {}
+        : { inputTokens: usage.inputTokens }),
+      ...(usage.outputTokens === undefined
+        ? {}
+        : { outputTokens: usage.outputTokens }),
     },
   };
 }
 
-export function createOpenAiProvider(
+export function createOpenAiTransport(
   apiKey: string,
   fetchImplementation: FetchLike = fetch,
-): AiProvider {
+): AiTransport {
   return {
     name: "openai",
-    async analyze(request) {
+    async generate(request) {
       const outcome = await postJson(
         fetchImplementation,
         OPENAI_ENDPOINT,
@@ -127,7 +106,7 @@ export function createOpenAiProvider(
             json_schema: {
               name: "sentinel_ai_finding",
               strict: true,
-              schema: request.schema,
+              schema: request.jsonSchema,
             },
           },
         },
@@ -135,7 +114,9 @@ export function createOpenAiProvider(
         request.maxResponseBytes,
       );
 
-      return outcome.ok ? readOpenAiOutcome(outcome.body) : outcome;
+      return outcome.state === "available"
+        ? readOpenAiOutcome(outcome.body)
+        : outcome;
     },
   };
 }

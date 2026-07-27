@@ -3,6 +3,7 @@ import { access, stat } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 
 import {
+  createAiRuntime,
   disabledAiSetup,
   type AiCheckSetup,
   type EnvironmentReferenceResolver,
@@ -43,7 +44,7 @@ export async function scanProject(
   const context: ScanContext = {
     config,
     repository,
-    ai: options.ai ?? disabledAiSetup(),
+    ai: createAiRuntime(options.ai ?? disabledAiSetup()),
     resolveEnvironmentReference:
       options.resolveEnvironmentReference ?? (() => undefined),
     fetch: fetchImplementation,

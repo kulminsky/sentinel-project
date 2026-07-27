@@ -1,97 +1,83 @@
 import {
+  isRecord,
+  parseStructuredValue,
   postJson,
-  readTokenCount,
-  type AiProvider,
-  type AiProviderOutcome,
+  readUsage,
+  type AiTransport,
+  type AiTransportOutcome,
   type FetchLike,
 } from "./provider.js";
 
 const CLAUDE_ENDPOINT = "https://api.anthropic.com/v1/messages";
 const CLAUDE_MODEL = "claude-haiku-4-5";
 
-function readClaudeOutcome(body: unknown): AiProviderOutcome {
-  if (typeof body !== "object" || body === null || Array.isArray(body)) {
-    return {
-      ok: false,
-      diagnosticCode: "AI_PROVIDER_ERROR",
-    };
+function unavailable(
+  diagnosticCode: Extract<
+    AiTransportOutcome,
+    { state: "unavailable" }
+  >["diagnosticCode"],
+): AiTransportOutcome {
+  return {
+    state: "unavailable",
+    diagnosticCode,
+  };
+}
+
+function readClaudeOutcome(body: unknown): AiTransportOutcome {
+  if (!isRecord(body)) {
+    return unavailable("AI_RESPONSE_UNRECOGNIZED");
   }
 
-  const response = body as Record<string, unknown>;
-  const stopReason = response.stop_reason;
-
-  if (stopReason === "refusal") {
-    return {
-      ok: false,
-      diagnosticCode: "AI_PROVIDER_REFUSAL",
-    };
+  if (body.stop_reason === "refusal") {
+    return unavailable("AI_PROVIDER_REFUSAL");
   }
 
-  if (stopReason === "max_tokens") {
-    return {
-      ok: false,
-      diagnosticCode: "AI_PROVIDER_TRUNCATED",
-    };
+  if (body.stop_reason === "max_tokens") {
+    return unavailable("AI_PROVIDER_TRUNCATED");
   }
 
-  if (stopReason !== "end_turn" || !Array.isArray(response.content)) {
-    return {
-      ok: false,
-      diagnosticCode: "AI_PROVIDER_ERROR",
-    };
+  if (
+    body.stop_reason !== "end_turn" ||
+    !Array.isArray(body.content) ||
+    body.content.length !== 1
+  ) {
+    return unavailable("AI_RESPONSE_UNRECOGNIZED");
   }
 
-  const textBlocks = response.content.filter(
-    (block): block is { type: "text"; text: string } =>
-      typeof block === "object" &&
-      block !== null &&
-      !Array.isArray(block) &&
-      (block as Record<string, unknown>).type === "text" &&
-      typeof (block as Record<string, unknown>).text === "string",
-  );
-
-  if (textBlocks.length !== 1) {
-    return {
-      ok: false,
-      diagnosticCode: "AI_PROVIDER_ERROR",
-    };
-  }
-  const textBlock = textBlocks[0];
-  if (!textBlock) {
-    return {
-      ok: false,
-      diagnosticCode: "AI_PROVIDER_ERROR",
-    };
+  const block: unknown = body.content[0];
+  if (!isRecord(block) || block.type !== "text") {
+    return unavailable("AI_RESPONSE_UNRECOGNIZED");
   }
 
-  const usage =
-    typeof response.usage === "object" &&
-    response.usage !== null &&
-    !Array.isArray(response.usage)
-      ? (response.usage as Record<string, unknown>)
-      : undefined;
-  const inputTokens = readTokenCount(usage?.input_tokens);
-  const outputTokens = readTokenCount(usage?.output_tokens);
+  const structured = parseStructuredValue(block.text);
+  const usage = readUsage(body.usage, "input_tokens", "output_tokens");
+  if (structured.state === "unavailable" || usage.state === "unavailable") {
+    return unavailable("AI_RESPONSE_UNRECOGNIZED");
+  }
 
   return {
-    ok: true,
-    response: {
-      content: textBlock.text,
+    state: "available",
+    value: structured.value,
+    provenance: {
       provider: "claude",
       model: CLAUDE_MODEL,
-      ...(inputTokens === undefined ? {} : { inputTokens }),
-      ...(outputTokens === undefined ? {} : { outputTokens }),
+      ...(usage.inputTokens === undefined
+        ? {}
+        : { inputTokens: usage.inputTokens }),
+      ...(usage.outputTokens === undefined
+        ? {}
+        : { outputTokens: usage.outputTokens }),
     },
   };
 }
 
-export function createClaudeProvider(
+export function createClaudeTransport(
   apiKey: string,
   fetchImplementation: FetchLike = fetch,
-): AiProvider {
+): AiTransport {
   return {
     name: "claude",
-    async analyze(request) {
+    async generate(request) {
       const outcome = await postJson(
         fetchImplementation,
         CLAUDE_ENDPOINT,
@@ -113,7 +99,7 @@ export function createClaudeProvider(
           output_config: {
             format: {
               type: "json_schema",
-              schema: request.schema,
+              schema: request.jsonSchema,
             },
           },
         },
@@ -121,7 +107,9 @@ export function createClaudeProvider(
         request.maxResponseBytes,
       );
 
-      return outcome.ok ? readClaudeOutcome(outcome.body) : outcome;
+      return outcome.state === "available"
+        ? readClaudeOutcome(outcome.body)
+        : outcome;
     },
   };
 }

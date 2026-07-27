@@ -2,15 +2,22 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "vitest";
 
-import { createClaudeProvider } from "../src/ai/claude.js";
-import { createOpenAiProvider } from "../src/ai/openai.js";
-import type { AiStructuredRequest, FetchLike } from "../src/ai/provider.js";
+import { createClaudeTransport } from "../src/ai/claude.js";
+import { createOpenAiTransport } from "../src/ai/openai.js";
+import type { AiTransportRequest, FetchLike } from "../src/ai/provider.js";
 
-const REQUEST: AiStructuredRequest = {
+const REQUEST: AiTransportRequest = {
   systemPrompt: "Return a finding.",
   userPrompt: "Synthetic evidence only.",
-  schema: {
+  jsonSchema: {
     type: "object",
+    properties: {
+      severity: {
+        type: "string",
+        enum: ["High", "Low"],
+      },
+    },
+    required: ["severity"],
     additionalProperties: false,
   },
   maxOutputTokens: 512,
@@ -18,9 +25,12 @@ const REQUEST: AiStructuredRequest = {
   maxResponseBytes: 64 * 1024,
 };
 
-function recordingFetch(responseBody: Readonly<Record<string, unknown>>): {
-  fetchImplementation: FetchLike;
-  calls: Array<{ input: string | URL | Request; init?: RequestInit }>;
+function recordingFetch(responseBody: unknown): {
+  readonly fetchImplementation: FetchLike;
+  readonly calls: Array<{
+    readonly input: string | URL | Request;
+    readonly init?: RequestInit;
+  }>;
 } {
   const calls: Array<{
     input: string | URL | Request;
@@ -62,7 +72,7 @@ function requestBody(init: RequestInit | undefined): string {
   return init.body;
 }
 
-test("OpenAI adapter sends one bounded structured-output request", async () => {
+test("OpenAI transport sends one native structured-output request", async () => {
   const credential = randomUUID();
   const recording = recordingFetch({
     choices: [
@@ -78,14 +88,14 @@ test("OpenAI adapter sends one bounded structured-output request", async () => {
       completion_tokens: 20,
     },
   });
-  const provider = createOpenAiProvider(
+  const transport = createOpenAiTransport(
     credential,
     recording.fetchImplementation,
   );
 
-  const outcome = await provider.analyze(REQUEST);
+  const outcome = await transport.generate(REQUEST);
 
-  assert.equal(outcome.ok, true);
+  assert.equal(outcome.state, "available");
   assert.equal(recording.calls.length, 1);
   const call = recording.calls[0];
   assert.ok(call);
@@ -104,13 +114,23 @@ test("OpenAI adapter sends one bounded structured-output request", async () => {
     (body.response_format as Record<string, unknown>).type,
     "json_schema",
   );
-  if (outcome.ok) {
-    assert.equal(outcome.response.inputTokens, 100);
-    assert.equal(outcome.response.outputTokens, 20);
+  assert.equal(
+    (
+      (body.response_format as Record<string, unknown>).json_schema as Record<
+        string,
+        unknown
+      >
+    ).strict,
+    true,
+  );
+  if (outcome.state === "available") {
+    assert.deepEqual(outcome.value, { severity: "High" });
+    assert.equal(outcome.provenance.inputTokens, 100);
+    assert.equal(outcome.provenance.outputTokens, 20);
   }
 });
 
-test("Claude adapter sends one bounded structured-output request", async () => {
+test("Claude transport sends one native structured-output request", async () => {
   const credential = randomUUID();
   const recording = recordingFetch({
     stop_reason: "end_turn",
@@ -125,14 +145,14 @@ test("Claude adapter sends one bounded structured-output request", async () => {
       output_tokens: 18,
     },
   });
-  const provider = createClaudeProvider(
+  const transport = createClaudeTransport(
     credential,
     recording.fetchImplementation,
   );
 
-  const outcome = await provider.analyze(REQUEST);
+  const outcome = await transport.generate(REQUEST);
 
-  assert.equal(outcome.ok, true);
+  assert.equal(outcome.state, "available");
   assert.equal(recording.calls.length, 1);
   const call = recording.calls[0];
   assert.ok(call);
@@ -154,13 +174,14 @@ test("Claude adapter sends one bounded structured-output request", async () => {
     ).type,
     "json_schema",
   );
-  if (outcome.ok) {
-    assert.equal(outcome.response.inputTokens, 90);
-    assert.equal(outcome.response.outputTokens, 18);
+  if (outcome.state === "available") {
+    assert.deepEqual(outcome.value, { severity: "High" });
+    assert.equal(outcome.provenance.inputTokens, 90);
+    assert.equal(outcome.provenance.outputTokens, 18);
   }
 });
 
-test("provider adapters classify refusal and output truncation", async () => {
+test("transports classify refusal and output truncation", async () => {
   const openAiRecording = recordingFetch({
     choices: [
       {
@@ -176,26 +197,26 @@ test("provider adapters classify refusal and output truncation", async () => {
     content: [],
   });
 
-  const refusal = await createOpenAiProvider(
+  const refusal = await createOpenAiTransport(
     randomUUID(),
     openAiRecording.fetchImplementation,
-  ).analyze(REQUEST);
-  const truncation = await createClaudeProvider(
+  ).generate(REQUEST);
+  const truncation = await createClaudeTransport(
     randomUUID(),
     claudeRecording.fetchImplementation,
-  ).analyze(REQUEST);
+  ).generate(REQUEST);
 
   assert.deepEqual(refusal, {
-    ok: false,
+    state: "unavailable",
     diagnosticCode: "AI_PROVIDER_REFUSAL",
   });
   assert.deepEqual(truncation, {
-    ok: false,
+    state: "unavailable",
     diagnosticCode: "AI_PROVIDER_TRUNCATED",
   });
 });
 
-test("provider adapters isolate HTTP and malformed envelope failures", async () => {
+test("HTTP failures remain provider errors while malformed envelopes fail closed", async () => {
   const failedFetch: FetchLike = () =>
     Promise.resolve(
       new Response("", {
@@ -206,67 +227,168 @@ test("provider adapters isolate HTTP and malformed envelope failures", async () 
     unexpected: true,
   });
 
-  const httpFailure = await createOpenAiProvider(
+  const httpFailure = await createOpenAiTransport(
     randomUUID(),
     failedFetch,
-  ).analyze(REQUEST);
-  const envelopeFailure = await createClaudeProvider(
+  ).generate(REQUEST);
+  const envelopeFailure = await createClaudeTransport(
     randomUUID(),
     malformed.fetchImplementation,
-  ).analyze(REQUEST);
+  ).generate(REQUEST);
 
   assert.deepEqual(httpFailure, {
-    ok: false,
+    state: "unavailable",
     diagnosticCode: "AI_PROVIDER_ERROR",
   });
   assert.deepEqual(envelopeFailure, {
-    ok: false,
-    diagnosticCode: "AI_PROVIDER_ERROR",
+    state: "unavailable",
+    diagnosticCode: "AI_RESPONSE_UNRECOGNIZED",
   });
 });
 
-test("provider timeout aborts the request without retrying", async () => {
-  let calls = 0;
-  const blockingFetch: FetchLike = async (_input, init) => {
-    calls += 1;
-    return await new Promise<Response>((_resolve, reject) => {
-      init?.signal?.addEventListener(
-        "abort",
-        () => reject(new Error("aborted")),
-        { once: true },
-      );
-    });
-  };
-  const provider = createOpenAiProvider(randomUUID(), blockingFetch);
+test("unrecognized completion states, blocks, JSON, and usage fail closed", async () => {
+  const responses: ReadonlyArray<{
+    readonly provider: "openai" | "claude";
+    readonly body: unknown;
+  }> = [
+    {
+      provider: "openai",
+      body: {
+        choices: [
+          {
+            finish_reason: "tool_calls",
+            message: {
+              content: '{"severity":"High"}',
+            },
+          },
+        ],
+      },
+    },
+    {
+      provider: "openai",
+      body: {
+        choices: [
+          {
+            finish_reason: "stop",
+            message: {
+              content: '```json\n{"severity":"High"}\n```',
+            },
+          },
+        ],
+      },
+    },
+    {
+      provider: "openai",
+      body: {
+        choices: [
+          {
+            finish_reason: "stop",
+            message: {
+              content: '{"severity":"High"}',
+            },
+          },
+        ],
+        usage: {
+          prompt_tokens: "100",
+          completion_tokens: 20,
+        },
+      },
+    },
+    {
+      provider: "claude",
+      body: {
+        stop_reason: "end_turn",
+        content: [
+          {
+            type: "text",
+            text: '{"severity":"High"}',
+          },
+          {
+            type: "text",
+            text: '{"severity":"Low"}',
+          },
+        ],
+      },
+    },
+    {
+      provider: "claude",
+      body: {
+        stop_reason: "pause_turn",
+        content: [
+          {
+            type: "text",
+            text: '{"severity":"High"}',
+          },
+        ],
+      },
+    },
+  ];
 
-  const outcome = await provider.analyze({
+  for (const response of responses) {
+    const recording = recordingFetch(response.body);
+    const transport =
+      response.provider === "openai"
+        ? createOpenAiTransport(randomUUID(), recording.fetchImplementation)
+        : createClaudeTransport(randomUUID(), recording.fetchImplementation);
+
+    const outcome = await transport.generate(REQUEST);
+    assert.deepEqual(outcome, {
+      state: "unavailable",
+      diagnosticCode: "AI_RESPONSE_UNRECOGNIZED",
+    });
+  }
+});
+
+test("provider timeout remains hard when fetch ignores abort without retrying", async () => {
+  let calls = 0;
+  const blockingFetch: FetchLike = async () => {
+    calls += 1;
+    return await new Promise<Response>(() => undefined);
+  };
+  const transport = createOpenAiTransport(randomUUID(), blockingFetch);
+
+  const outcome = await transport.generate({
     ...REQUEST,
     timeoutMs: 1,
   });
 
   assert.equal(calls, 1);
   assert.deepEqual(outcome, {
-    ok: false,
+    state: "unavailable",
     diagnosticCode: "AI_PROVIDER_TIMEOUT",
   });
 });
 
-test("provider adapters reject response bodies above the accepted limit", async () => {
-  const recording = recordingFetch({
+test("transports reject non-JSON and oversized response bodies", async () => {
+  const nonJsonFetch: FetchLike = () =>
+    Promise.resolve(
+      new Response('{"choices":[]}', {
+        status: 200,
+        headers: {
+          "content-type": "text/plain",
+        },
+      }),
+    );
+  const oversized = recordingFetch({
     padding: "x".repeat(256),
   });
-  const provider = createOpenAiProvider(
-    randomUUID(),
-    recording.fetchImplementation,
-  );
 
-  const outcome = await provider.analyze({
+  const wrongContentType = await createOpenAiTransport(
+    randomUUID(),
+    nonJsonFetch,
+  ).generate(REQUEST);
+  const oversizedBody = await createOpenAiTransport(
+    randomUUID(),
+    oversized.fetchImplementation,
+  ).generate({
     ...REQUEST,
     maxResponseBytes: 32,
   });
 
-  assert.deepEqual(outcome, {
-    ok: false,
-    diagnosticCode: "AI_PROVIDER_ERROR",
-  });
+  for (const outcome of [wrongContentType, oversizedBody]) {
+    assert.deepEqual(outcome, {
+      state: "unavailable",
+      diagnosticCode: "AI_RESPONSE_UNRECOGNIZED",
+    });
+  }
 });

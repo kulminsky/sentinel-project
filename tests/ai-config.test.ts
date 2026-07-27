@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "vitest";
+import { z } from "zod";
 
-import { resolveAiSetup } from "../src/ai/config.js";
+import { createAiRuntime, resolveAiSetup } from "../src/ai/config.js";
 import type { FetchLike } from "../src/ai/provider.js";
 
 const unreachableFetch: FetchLike = () =>
@@ -79,7 +80,70 @@ test("OpenAI and Claude can each be selected explicitly", () => {
   assert.equal(openAi.kind, "ready");
   assert.equal(claude.kind, "ready");
   if (openAi.kind === "ready" && claude.kind === "ready") {
-    assert.equal(openAi.provider.name, "openai");
-    assert.equal(claude.provider.name, "claude");
+    assert.equal(typeof openAi.createClient, "function");
+    assert.equal(typeof claude.createClient, "function");
+    assert.equal("provider" in openAi, false);
+    assert.equal("provider" in claude, false);
   }
+});
+
+test("only the explicitly selected provider receives a request", async () => {
+  const credentials = new Map([
+    ["OPENAI_API_KEY", randomUUID()],
+    ["ANTHROPIC_API_KEY", randomUUID()],
+  ]);
+  const calls: string[] = [];
+  const fetchImplementation: FetchLike = (input) => {
+    const url =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.href
+          : input.url;
+    calls.push(url);
+    return Promise.resolve(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              finish_reason: "stop",
+              message: {
+                content: '{"result":"ok"}',
+              },
+            },
+          ],
+        }),
+        {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+          },
+        },
+      ),
+    );
+  };
+  const setup = resolveAiSetup(
+    {
+      enabled: true,
+      provider: "openai",
+    },
+    (name) => credentials.get(name),
+    fetchImplementation,
+  );
+  const runtime = createAiRuntime(setup);
+  assert.equal(runtime.kind, "ready");
+  if (runtime.kind !== "ready") {
+    return;
+  }
+
+  const outcome = await runtime.client.generate({
+    systemPrompt: "Return a result.",
+    userPrompt: "Synthetic evidence.",
+    outputSchema: z.strictObject({
+      result: z.literal("ok"),
+    }),
+  });
+
+  assert.equal(outcome.state, "available");
+  assert.deepEqual(calls, ["https://api.openai.com/v1/chat/completions"]);
 });

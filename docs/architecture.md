@@ -50,7 +50,7 @@ Every check owns an explicit timeout and error boundary. Completion timing never
 | Service probe and HTTP boundary | Determine reachability and perform bounded, read-only HTTP requests. It returns observations rather than policy decisions.                                     |
 | API checks                      | Interpret API observations and shallow OpenAPI or route evidence.                                                                                              |
 | Playwright boundary             | Own Chromium lifecycle, contexts, authentication state, timeouts, axe integration, and browser observations.                                                   |
-| AI boundary                     | Select and redact bounded evidence, make one provider request, and validate cited structured output.                                                           |
+| AI boundary                     | Expose typed structured output to checks; own explicit vendor selection, private transports, paid-call limits, and fail-closed response validation.            |
 | Result model                    | Runtime-validate every result and construct one deterministic Overall Summary.                                                                                 |
 | Report module                   | Validate the normalized report and render one selected Markdown, JSON, or plain-text terminal representation.                                                  |
 
@@ -209,23 +209,23 @@ pass.
 
 Sentinel should produce the most complete report possible:
 
-| Condition                                                      | Behavior                                                                               |
-| -------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| No config or runtime URLs                                      | Scan the current directory statically; skip affected runtime checks.                   |
-| API unavailable                                                | Emit a normal availability note; run static API fallback when implemented.             |
-| UI unavailable                                                 | Emit a normal availability note and skip future browser checks.                        |
-| Authentication absent                                          | Run public checks and skip only protected expectations.                                |
-| OpenAPI invalid                                                | Warn and attempt best-effort route/schema fallback.                                    |
-| Repository inventory bounded or partially unreadable           | Preserve positive evidence; skip affected absence claims and mark the scan incomplete. |
-| npm freshness query unavailable                                | Skip freshness analysis without failing or marking the scan incomplete.                |
-| `package-lock.json` or npm audit unavailable                   | Skip vulnerability lookup; never claim the project is clean.                           |
-| npm audit output malformed or internally inconsistent          | Skip the audit result, mark the scan incomplete, and never claim the project is clean. |
-| Runtime Security target unavailable or authentication required | Retain static evidence or emit a scoped skipped note; never send target credentials.   |
-| Playwright launch fails                                        | Continue other checks and mark the scan incomplete.                                    |
-| AI disabled or credential absent                               | Skip only the AI check; the scan remains complete.                                     |
-| AI provider timeout/failure or invalid response                | Skip only the AI check, continue deterministic checks, and mark the scan incomplete.   |
-| Individual check throws                                        | Emit a redacted execution diagnostic and mark the overall scan incomplete.             |
-| Target root unreadable or report cannot be rendered or written | Treat as a fatal tool error.                                                           |
+| Condition                                                            | Behavior                                                                               |
+| -------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| No config or runtime URLs                                            | Scan the current directory statically; skip affected runtime checks.                   |
+| API unavailable                                                      | Emit a normal availability note; run static API fallback when implemented.             |
+| UI unavailable                                                       | Emit a normal availability note and skip future browser checks.                        |
+| Authentication absent                                                | Run public checks and skip only protected expectations.                                |
+| OpenAPI invalid                                                      | Warn and attempt best-effort route/schema fallback.                                    |
+| Repository inventory bounded or partially unreadable                 | Preserve positive evidence; skip affected absence claims and mark the scan incomplete. |
+| npm freshness query unavailable                                      | Skip freshness analysis without failing or marking the scan incomplete.                |
+| `package-lock.json` or npm audit unavailable                         | Skip vulnerability lookup; never claim the project is clean.                           |
+| npm audit output malformed or internally inconsistent                | Skip the audit result, mark the scan incomplete, and never claim the project is clean. |
+| Runtime Security target unavailable or authentication required       | Retain static evidence or emit a scoped skipped note; never send target credentials.   |
+| Playwright launch fails                                              | Continue other checks and mark the scan incomplete.                                    |
+| AI disabled or credential absent                                     | Skip only the AI check; the scan remains complete.                                     |
+| AI provider timeout/failure, call-limit refusal, or invalid response | Skip only the AI check, continue deterministic checks, and mark the scan incomplete.   |
+| Individual check throws                                              | Emit a redacted execution diagnostic and mark the overall scan incomplete.             |
+| Target root unreadable or report cannot be rendered or written       | Treat as a fatal tool error.                                                           |
 
 The CLI returns a nonzero exit code only for fatal tool errors. Target findings, unavailable services, and isolated check failures remain report content.
 
@@ -261,20 +261,23 @@ The required AI check performs semantic test-gap analysis by comparing a bounded
 
 The MVP uses:
 
-- One small provider boundary with explicit OpenAI and Claude adapters.
+- One typed, provider-neutral client exposed to checks, with private OpenAI and Claude transports.
 - Mandatory provider selection when AI is enabled; Sentinel never infers a provider from available credentials.
-- At most one bounded request to the selected provider per scan.
-- A strict structured response.
+- One explicit setup switch and one client per scan; there is no provider registry.
+- An atomically reserved allowance of one paid request total and one active request at a time. Failed attempts consume the allowance.
+- Vendor-native schema-constrained output generated from the same strict Zod schema used for local validation.
+- Parsing only from each vendor's documented structured-output slot; no free-text, code-fence, partial-output, or multi-block recovery.
 - Exact citations limited to evidence supplied in the request.
 - Repository and target-secret redaction, plus input-size limits, before evidence transmission.
-- Deterministic validation and mapping into Sentinel results.
+- Deterministic validation and mapping into Sentinel results. A valid AI finding can warn or fail but can never pass.
+- Fail-closed handling: malformed, unknown, refused, truncated, oversized, schema-invalid, or otherwise unrecognized output becomes `Skipped / Info` and marks the scan incomplete.
 - No multi-turn workflow, provider registry, or elaborate retry system.
 
 The selected provider credential may be sent only as an authentication header to that provider. Real credential values must never enter prompts, request bodies, response evidence, reports, logs, tests, or documentation.
 
 The overall report summary remains deterministic. When paid credentials are absent, all deterministic checks run and the AI check is `Skipped / Info`. The committed sample report must demonstrate a real AI-enabled run.
 
-The current feasibility spike is intentionally synthetic: it sends only a fixed, secret-free contract-and-test fixture through the selected provider. It uses process environment variables for enablement, explicit provider selection, and provider-specific credentials. Real repository evidence selection and redaction remain part of the later production AI milestone.
+The current feasibility spike is intentionally synthetic: it sends only a fixed, secret-free contract-and-test fixture through the selected provider. It uses process environment variables for enablement, explicit provider selection, and provider-specific credentials. Limits are fixed at 8 KiB of evidence, 512 output tokens, a 64 KiB accepted response body, a 20-second provider timeout, and a 25-second check timeout. Real repository evidence selection and redaction remain part of the later production AI milestone.
 
 ## Testing Strategy
 
@@ -323,7 +326,7 @@ sample run remains mandatory.
 4. Add secret detection and npm-only vulnerability analysis. This milestone is complete.
 5. Add service probes, shallow OpenAPI fallback, and safe API/security runtime checks. Central reachability and Security runtime observations are complete; API fallback and assertions are pending.
 6. Add the Playwright lifecycle and required browser checks.
-7. Complete the bounded AI check and no-AI behavior.
+7. Harden the synthetic AI check behind a provider-neutral, one-call, fail-closed client and preserve no-AI behavior. This milestone is complete; production evidence selection and redaction remain pending.
 8. Harden tests, generate the demo report, complete the README, and assemble
    Cursor evidence. The standalone demo target and scan configuration are
    complete; the committed report and remaining submission evidence are

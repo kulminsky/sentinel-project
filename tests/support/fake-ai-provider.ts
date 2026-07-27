@@ -1,27 +1,57 @@
 import type {
-  AiProvider,
+  StructuredAiClient,
+  StructuredAiOutcome,
+  StructuredAiRequest,
+} from "../../src/ai/client.js";
+import type {
+  AiTransport,
+  AiTransportOutcome,
+  AiTransportRequest,
   AiProviderName,
-  AiProviderOutcome,
-  AiStructuredRequest,
 } from "../../src/ai/provider.js";
 
-export interface FakeAiProvider {
-  provider: AiProvider;
-  requests: AiStructuredRequest[];
+export interface FakeStructuredAiClient {
+  readonly client: StructuredAiClient;
+  readonly requests: StructuredAiRequest<unknown>[];
 }
 
-export function createFakeAiProvider(
+export function createFakeStructuredAiClient(
   outcome:
-    AiProviderOutcome | ((request: AiStructuredRequest) => AiProviderOutcome),
-  name: AiProviderName = "openai",
-): FakeAiProvider {
-  const requests: AiStructuredRequest[] = [];
+    | StructuredAiOutcome<unknown>
+    | ((request: StructuredAiRequest<unknown>) => StructuredAiOutcome<unknown>),
+): FakeStructuredAiClient {
+  const requests: StructuredAiRequest<unknown>[] = [];
 
   return {
     requests,
-    provider: {
+    client: {
+      generate<T>(request: StructuredAiRequest<T>) {
+        requests.push(request);
+        const selected =
+          typeof outcome === "function" ? outcome(request) : outcome;
+        return Promise.resolve(selected as StructuredAiOutcome<T>);
+      },
+    },
+  };
+}
+
+export interface FakeAiTransport {
+  readonly transport: AiTransport;
+  readonly requests: AiTransportRequest[];
+}
+
+export function createFakeAiTransport(
+  outcome:
+    AiTransportOutcome | ((request: AiTransportRequest) => AiTransportOutcome),
+  name: AiProviderName = "openai",
+): FakeAiTransport {
+  const requests: AiTransportRequest[] = [];
+
+  return {
+    requests,
+    transport: {
       name,
-      analyze(request) {
+      generate(request) {
         requests.push(request);
         return Promise.resolve(
           typeof outcome === "function" ? outcome(request) : outcome,

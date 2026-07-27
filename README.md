@@ -23,9 +23,9 @@ Sentinel currently:
 - Audits root npm lockfiles, detects high-confidence secrets without reporting their values, and checks `.env` ignore hygiene.
 - Uses configured unauthenticated targets for bounded security-header, CORS, and evidence-derived debug-endpoint observations.
 - Reports explicit `Skipped / Info` coverage rows for unfinished API and UI analysis.
-- Runs or gracefully skips one synthetic semantic API test-gap check.
-- Supports explicit OpenAI or Claude selection for that synthetic check.
-- Validates structured AI findings and rejects unsupported evidence citations.
+- Runs or gracefully skips one synthetic semantic API test-gap check through a provider-neutral typed client.
+- Supports explicit OpenAI or Claude selection while keeping vendor envelopes out of check logic.
+- Uses native schema-constrained output, validates it locally, and fails closed on every unrecognized response.
 - Produces one configured Markdown, JSON, or plain-text terminal report from a shared runtime-validated model.
 - Includes one normalized Overall Summary with complete status/severity counts and a deterministic narrative.
 - Returns a nonzero exit code only when configuration cannot be loaded, the scan cannot run, or the selected report cannot be rendered or written.
@@ -189,9 +189,11 @@ SENTINEL_AI_ENABLED=true SENTINEL_AI_PROVIDER=openai npm start
 SENTINEL_AI_ENABLED=true SENTINEL_AI_PROVIDER=claude npm start
 ```
 
-When AI is enabled, `SENTINEL_AI_PROVIDER` is required and must be `openai` or `claude`; missing or unsupported selection is a fatal configuration error. A missing selected-provider credential produces a normal `Skipped / Info` result. Provider or invalid-response failures affect only the AI check, mark the report incomplete, and do not produce a nonzero exit code.
+When AI is enabled, `SENTINEL_AI_PROVIDER` is required and must be `openai` or `claude`; missing or unsupported selection is a fatal configuration error. A missing selected-provider credential produces a normal `Skipped / Info` result. Provider, timeout, refusal, truncation, call-limit, and unrecognized or schema-invalid response failures affect only the AI check, mark the report incomplete, and do not produce a nonzero exit code.
 
-The spike uses fixed models (`gpt-5.6-luna` and `claude-haiku-4-5`), one request, an 8 KiB evidence limit, a 512-token output limit, and a 20-second timeout. A request against the synthetic fixture is expected to cost well under USD $0.01 at current list prices; Sentinel does not embed provider pricing.
+The check receives only a locally validated typed finding and sanitized provider/model/token provenance. OpenAI and Claude transports own their vendor-native structured-output request and response envelopes. An exact provider switch constructs one client per scan; the client atomically permits one paid request total and one active request at a time. It performs no retries, streaming, batching, provider comparison, or free-text JSON recovery. An AI outcome can be only `Fail`, `Warn`, or `Skipped`; it never produces a `Pass`.
+
+The spike uses fixed models (`gpt-5.6-luna` and `claude-haiku-4-5`), an 8 KiB evidence limit, a 512-token output limit, a 64 KiB response limit, a 20-second provider timeout, and a 25-second check timeout. A failed or malformed request still consumes the one-call allowance. A request against the synthetic fixture is expected to cost well under USD $0.01 at current list prices; Sentinel does not embed provider pricing.
 
 ## Architecture Documents
 
@@ -239,7 +241,7 @@ This list describes the approved implementation target, not functionality curren
 4. **Complete:** Add high-confidence secret detection, `.env` hygiene, and npm-only vulnerability analysis.
 5. **In progress:** Service reachability and Security runtime observations are complete; shallow API fallback and assertions remain pending.
 6. Add the Playwright lifecycle and required browser checks.
-7. Complete AI integration and no-AI fallback behavior.
+7. **Complete for the synthetic spike:** Harden provider-neutral, fail-closed AI execution and no-AI behavior; production evidence selection and redaction remain pending.
 8. **In progress:** The reproducible demo target is complete; harden remaining tests and complete the sample report, documentation, and process evidence.
 
 Stretch work begins only after all required milestones and submission artifacts are complete.
@@ -257,6 +259,7 @@ The repository currently contains the foundation implementation and its document
 │   ├── ai/
 │   │   ├── check.ts
 │   │   ├── claude.ts
+│   │   ├── client.ts
 │   │   ├── config.ts
 │   │   ├── fixture.ts
 │   │   ├── openai.ts
@@ -362,7 +365,7 @@ For each milestone:
 - **Core runner — complete:** four concurrent analysis-level groups, sequential per-level checks, per-check timeouts, isolated failures, and deterministic ordering.
 - **Static analysis — in progress:** bounded inventory, Node/TypeScript detection, repository checks, npm audit, high-confidence secret detection, and `.env` hygiene are complete; API fallback remains planned.
 - **Runtime analysis — in progress:** centralized API/UI reachability plus unauthenticated header, CORS, and debug-endpoint observations are complete; API assertions and Playwright checks remain planned.
-- **AI analysis:** synthetic multi-provider feasibility is complete; production evidence selection and redaction remain planned.
+- **AI analysis:** provider-neutral, fail-closed synthetic multi-provider execution is complete; production evidence selection and redaction remain planned.
 - **Submission readiness — in progress:** the standalone demo target is complete;
   the final sample report, remaining documentation, and process evidence are
   pending.

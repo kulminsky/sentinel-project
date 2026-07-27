@@ -1,25 +1,36 @@
 import type { SentinelConfig } from "../config/schema.js";
-import { createClaudeProvider } from "./claude.js";
-import { createOpenAiProvider } from "./openai.js";
-import type { AiProvider, FetchLike } from "./provider.js";
+import { createStructuredAiClient } from "./client.js";
+import { createClaudeTransport } from "./claude.js";
+import { createOpenAiTransport } from "./openai.js";
+import type { StructuredAiClient } from "./client.js";
+import type { FetchLike } from "./provider.js";
 
 export type AiPrerequisiteCode = "AI_DISABLED" | "AI_CREDENTIAL_MISSING";
 
 export type EnvironmentReferenceResolver = (name: string) => string | undefined;
 
+export interface SkippedAiSetup {
+  readonly kind: "skipped";
+  readonly diagnosticCode: AiPrerequisiteCode;
+  readonly finding: string;
+  readonly recommendation: string;
+}
+
 export type AiCheckSetup =
   | {
-      kind: "ready";
-      provider: AiProvider;
+      readonly kind: "ready";
+      createClient(): StructuredAiClient;
     }
-  | {
-      kind: "skipped";
-      diagnosticCode: AiPrerequisiteCode;
-      finding: string;
-      recommendation: string;
-    };
+  | SkippedAiSetup;
 
-export function disabledAiSetup(): AiCheckSetup {
+export type AiCheckRuntime =
+  | {
+      readonly kind: "ready";
+      readonly client: StructuredAiClient;
+    }
+  | SkippedAiSetup;
+
+export function disabledAiSetup(): SkippedAiSetup {
   return {
     kind: "skipped",
     diagnosticCode: "AI_DISABLED",
@@ -27,6 +38,15 @@ export function disabledAiSetup(): AiCheckSetup {
     recommendation:
       "Set SENTINEL_AI_ENABLED=true and select an AI provider to enable this check.",
   };
+}
+
+export function createAiRuntime(setup: AiCheckSetup): AiCheckRuntime {
+  return setup.kind === "ready"
+    ? {
+        kind: "ready",
+        client: setup.createClient(),
+      }
+    : setup;
 }
 
 export function resolveAiSetup(
@@ -54,7 +74,10 @@ export function resolveAiSetup(
 
       return {
         kind: "ready",
-        provider: createOpenAiProvider(credential, fetchImplementation),
+        createClient: () =>
+          createStructuredAiClient(
+            createOpenAiTransport(credential, fetchImplementation),
+          ),
       };
     }
     case "claude": {
@@ -72,7 +95,10 @@ export function resolveAiSetup(
 
       return {
         kind: "ready",
-        provider: createClaudeProvider(credential, fetchImplementation),
+        createClient: () =>
+          createStructuredAiClient(
+            createClaudeTransport(credential, fetchImplementation),
+          ),
       };
     }
   }

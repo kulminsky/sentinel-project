@@ -1,5 +1,5 @@
 import type {
-  AiCheckSetup,
+  AiCheckRuntime,
   EnvironmentReferenceResolver,
 } from "../ai/config.js";
 import type { SentinelConfig } from "../config/schema.js";
@@ -36,7 +36,7 @@ export interface ServiceReachabilityCache {
 export interface ScanContext {
   readonly config: SentinelConfig;
   readonly repository: RepositoryInspection;
-  readonly ai: AiCheckSetup;
+  readonly ai: AiCheckRuntime;
   readonly resolveEnvironmentReference: EnvironmentReferenceResolver;
   readonly fetch: FetchLike;
   readonly reachability: ServiceReachabilityCache;
