@@ -1,5 +1,7 @@
 # Sentinel Development Evidence
 
+[Back to the project README](../../README.md)
+
 This directory contains screenshots selected from genuine development sessions
 used to build Sentinel. They record requirements analysis, design decisions,
 milestone planning, implementation reviews, runtime validation, and
@@ -60,10 +62,15 @@ squashed into one final implementation commit:
 | Security and AI hardening             | `59f7997`, `c12552c`, `3e45588` | Added five Security checks, hardened provider-neutral fail-closed AI execution, and documented a manual synthetic OpenAI verification.                                  |
 | Runtime API and browser analysis      | `310de71`, `dc33341`            | Added exclusive live/static API analysis and the shared Playwright Chromium session.                                                                                    |
 | Truthfulness and submission hardening | `06cc64a`, `62b7580`            | Tightened evidence and UI claims, then finalized target-derived AI safety, report semantics, tracked deliverables, evidence documentation, and submission verification. |
+| Documentation and optional Docker     | `b0cd0ab`, `b18e251`            | Improved the cross-platform submission runbook and architecture visuals, then added isolated Sentinel/sample images and explicit Compose orchestration.                 |
 
-The 17-commit timeline includes the submission-hardening work that followed
-`06cc64a`. Target-derived AI evidence, report-summary corrections, the tracked
-sample report, and this evidence pack later landed together in `62b7580`.
+The implementation and delivery history covered by this index contains 19
+commits through `b18e251`. The screenshot catalog correlates with the first 17
+commits, from `afd99e9` through `62b7580`. Target-derived AI evidence,
+report-summary corrections, the tracked sample report, and this evidence pack
+landed together in `62b7580`. The later documentation commit `b0cd0ab` and
+optional Docker commit `b18e251` have no dedicated screenshots and are
+supported by their committed diffs rather than the image catalog.
 
 ## Screenshot Catalog
 
@@ -128,31 +135,6 @@ The sample application's construction in `acf114b` has no dedicated capture;
 | [`18.jpg`](./18.jpg) | Demo running versus stopped   | Shows two full scans that both exited 0 without hangs or crashes, plus the change from live Security/API/UI findings to stopped-service fallback and skips. The Axe-driven incomplete status and “responsive layout” wording are historical behavior.                                                                | Integrated runtime validation | Prove graceful degradation and mode switching against the real demo target.                | Represents the integrated state after `dc33341` and before later truthfulness corrections in `06cc64a` and the subsequent submission-hardening phase. |
 | [`19.jpg`](./19.jpg) | Row-by-row truthfulness audit | Shows a 32-row audit against files, endpoints, and page evidence. It identifies a misleading summary, target-local CI wording, and an independent-browser replay limitation. A later, stricter pass-only review found additional risks.                                                                              | Post-integration review       | Challenge clean and Pass results rather than accepting the generated report at face value. | The review cycle led into `06cc64a` and later report-summary work; no exact hash is visible.                                                          |
 | [`20.jpg`](./20.jpg) | Submission-readiness audit    | Shows a sub-agent-assisted comparison with the assignment and a separate README claim audit. It identified the then-synthetic AI evidence and missing public deliverables as blockers. Some visible findings are now historical, including the statement that the public repository contained only the first commit. | Final requirements audit      | Find brief violations and unsupported claims before a reviewer does.                       | Occurs after the implemented levels and leads into the submission-hardening work finalized in `62b7580`; the screenshot does not display that hash.   |
-
-## How the Implementation Evolved
-
-The evidence shows a progression from decisions to executable behavior rather
-than a single final-result dump. Early captures establish the brief and reduce
-scope before code. The first implementation deliberately proves one complete
-path, after which configuration, scheduling, reporting, and each analysis level
-are added separately. Later captures shift from construction to skepticism:
-they reproduce parser defects, compare live and dormant service behavior,
-inspect individual report rows, and finally audit the whole project against the
-brief.
-
-Several historical claims were deliberately narrowed or replaced:
-
-- Sequential execution became concurrent level execution with sequential checks
-  inside each level.
-- The AI feasibility fixture was later replaced by bounded target-derived
-  evidence.
-- General responsive wording became the narrower horizontal-overflow
-  observation.
-- Axe indeterminate evidence stopped making an otherwise completed scan
-  `Incomplete`.
-
-Those changes are evidence of review and correction, not contradictions in the
-current documented architecture.
 
 ## Evidence Quality and Remaining Gaps
 

@@ -1,6 +1,23 @@
 # Sentinel Configuration
 
-Sentinel accepts an optional `sentinel.config.json` and `.env` in the invocation directory. Use `sentinel --config <path>` to select another JSON file; explicitly configured relative filesystem paths and the adjacent `.env` then resolve from that file's directory.
+From the Sentinel repository checkout, select a configuration file with:
+
+```sh
+npm start -- --config ./path/to/sentinel.config.json
+```
+
+`npm start` builds the current source before invoking the CLI. Use the shorter
+direct form only when the Sentinel CLI has already been built and installed or
+linked:
+
+```sh
+sentinel --config ./path/to/sentinel.config.json
+```
+
+Sentinel accepts an optional `sentinel.config.json` and `.env` in the invocation
+directory. An explicit `--config` path selects another JSON file; explicitly
+configured relative filesystem paths and the adjacent `.env` then resolve from
+that file's directory.
 
 Configuration precedence is:
 
@@ -122,17 +139,10 @@ All objects are strict: unknown keys are rejected, including inside endpoints, a
 - UI analysis accepts at most 10 pages and five form flows. Every form flow requires one through 20 steps.
 - An endpoint, page, or form flow with `useAuthentication: true` requires the corresponding API or UI authentication block.
 
-API/UI base targets and timeouts drive one central, read-only reachability probe per configured service. Cached API reachability selects either live endpoint assertions or static OpenAPI fallback for the full scan. Live API checks may resolve configured header-authentication references for protected endpoints; missing values skip only those endpoints. Unauthenticated API endpoints and UI pages are also eligible for bounded Security header/CORS checks, while configured debug-like paths can contribute static debug-route evidence. Sentinel never resolves target authentication for Security requests.
-
-When the cached UI probe is reachable, one Playwright Chromium session consumes
-the configured pages, two viewports, optional authentication, and optional form
-flows. Header authentication is applied only to same-origin browser requests;
-storage-state files are handled by Playwright. Missing authentication or
-environment-backed form values skip only the affected protected target or flow.
-Each Playwright operation is bounded by `ui.timeoutMs` and the remaining
-browser-analysis budget.
-Chromium binaries remain an explicit `npx playwright install chromium` step and
-are not downloaded during `npm install`.
+The configuration supplies targets and expectations; it does not change
+Sentinel's read-only runtime or external service-lifecycle boundaries. See
+the [architecture](architecture.md) for reachability, live/static API mode
+selection, Playwright execution, graceful degradation, and timeout behavior.
 
 ## Report Formats
 
@@ -143,6 +153,27 @@ are not downloaded during `npm install`.
 | `terminal` | `{ "format": "terminal" }`                        | Writes the complete plain-text report to stdout.                 |
 
 Sentinel renders exactly one format per scan. A terminal report cannot include `path`, and JSON never derives or substitutes one.
+
+Relative report paths resolve from the selected configuration directory.
+Without an explicit configuration file, the default Markdown path remains
+`sentinel-report.md` in the invocation directory.
+
+For Markdown and JSON output:
+
+- The report's parent directory must already exist; Sentinel does not create
+  missing parent directories.
+- The destination and its parent directory must permit the requested write.
+- A missing destination file is created. An existing destination's contents
+  are replaced rather than appended.
+- A render or write failure, including a missing or unwritable parent
+  directory, is a fatal tool error. Sentinel writes the failure to stderr,
+  returns a nonzero exit code, and does not fall back to another report format
+  or path.
+
+Terminal output has no filesystem destination and writes the complete report
+only to stdout. Findings, warnings, skipped checks, and unavailable optional
+capabilities remain report content and do not by themselves produce a nonzero
+exit code.
 
 ## Authentication Shapes
 

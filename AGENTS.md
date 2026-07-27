@@ -2,7 +2,7 @@
 
 These instructions apply to the entire repository.
 
-- Treat `docs/architecture.md` and `docs/decisions.md` as the approved MVP target. Use `README.md` and the codebase to determine what is currently implemented; never assume a planned capability already exists.
+- Treat `docs/architecture.md` as the current implemented architecture and `docs/decisions.md` as its approved constraints. Use `docs/configuration.md` for the configuration contract, `README.md` for the reviewer runbook, and the codebase as the authority for executable behavior.
 - Keep each change limited to the current requested milestone and stop when that milestone is complete.
 - Prefer KISS, plain functions, fixed check registration, and small explicit boundaries.
 - Avoid speculative abstractions, class hierarchies, plugin systems, dependency-injection containers, and unrequested flexibility.

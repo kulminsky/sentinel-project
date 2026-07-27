@@ -1,360 +1,253 @@
 # Sentinel Architecture
 
-## Goal and Scope
+## Goal and Implemented Scope
 
-Sentinel is a TypeScript CLI that scans a local project and produces an actionable quality report. The MVP is designed for a 2-3 business-day implementation window and prioritizes a polished, reviewable result over broad but shallow coverage.
-
-This document describes the approved MVP target architecture. `README.md` and the codebase define the currently implemented state; a planned capability is not implemented until they show it as available.
+Sentinel is a TypeScript CLI that scans a readable local project and produces
+one actionable quality report. The implemented MVP favors bounded,
+explainable checks and graceful degradation over broad but shallow coverage.
+It is neither a hosted service nor a plugin platform.
 
 Sentinel provides:
 
-- Generic static repository and security checks for any readable local project.
-- Deeper Node.js/npm checks when a Node project is detected.
-- Safe API and browser checks when configured services are reachable.
-- Static API fallback when services are unavailable.
-- One bounded LLM-based semantic test-gap check.
-- One selected Markdown, JSON, or plain-text terminal report containing all required statuses, severities, findings, recommendations, and summary data.
+- Generic static repository and security checks.
+- Deeper root Node.js/npm and TypeScript checks when supported evidence is
+  present.
+- Configured, read-only API and browser checks when services are reachable.
+- Static OpenAPI fallback when a configured API is unavailable.
+- One bounded, selected-provider semantic API test-gap check over configured
+  OpenAPI and related test evidence.
+- One selected Markdown, JSON, or plain-text terminal report with a normalized
+  Overall Summary.
 
-The design favors plain functions, fixed check registration, explicit boundaries, and bounded concurrency at the analysis-level boundary. Sentinel is not a plugin platform or a hosted service.
+The standalone Express/TypeScript target under `sample-app/` supplies a
+reproducible mix of correct behavior and intentional findings. Its process
+lifecycle remains outside Sentinel.
 
-The repository currently includes a standalone Express and TypeScript sample
-target with its own manifest and lockfile. Root installation installs it with
-package scripts disabled, while its process remains explicitly controlled by
-the reviewer. Its Security and API evidence is consumed by implemented checks;
-its seeded UI flaws are consumed by the implemented Playwright check.
+This document defines the current architecture and its approved boundaries.
+[`docs/decisions.md`](decisions.md) records the decisions that keep those
+boundaries stable, [`docs/configuration.md`](configuration.md) is the complete
+configuration contract, and [`README.md`](../README.md) is the reviewer
+runbook. The codebase remains authoritative for executable behavior.
 
-## Approved Architecture
+## Execution Architecture
 
-The scan is coordinated by one visible pipeline:
+One visible pipeline coordinates every scan:
 
 1. Load and validate configuration.
 2. Validate the target and build one bounded shared repository inventory.
-3. Probe each configured API and UI service once and cache the observations.
+3. Probe the configured API and UI services once and cache the observations.
 4. Run the four fixed analysis-level groups concurrently.
-5. Run checks sequentially in registration order within each level.
-6. Normalize results, build one summary, and render the configured report format.
-
-Every check owns an explicit timeout and error boundary. Completion timing never controls report order, and no scheduler or general concurrency framework is used.
-
-The diagram summarizes the shared setup, concurrent level execution, and
-single validated reporting path.
+5. Run registered checks sequentially within each level.
+6. Validate results, build one Overall Summary, and render one selected report.
 
 ```mermaid
 flowchart TD
     accTitle: Sentinel scan execution pipeline
     accDescr: Strict configuration and one shared repository inventory feed cached reachability and four concurrent analysis groups. Checks remain sequential within each group before results are validated, summarized, and rendered.
 
-    A["CLI loads and validates strict configuration"] --> B["Validate target and build one shared repository inventory"]
+    A["CLI loads strict configuration"] --> B["Validate target and build shared inventory"]
     B --> C["Probe configured API and UI services concurrently"]
-    C --> D["Build shared ScanContext with cached reachability"]
+    C --> D["Build ScanContext with cached reachability"]
 
     subgraph LEVELS["Four analysis levels run concurrently"]
-        E1["Code and Repository: sequential timeout-isolated checks"]
-        E2["Security: sequential timeout-isolated checks"]
-        E3["API and Backend: sequential timeout-isolated checks"]
-        E4["UI and Browser: sequential timeout-isolated checks"]
+        E1["Code and Repository: sequential checks"]
+        E2["Security: sequential checks"]
+        E3["API and Backend: sequential checks"]
+        E4["UI and Browser: sequential checks"]
     end
 
     D --> E1
     D --> E2
     D --> E3
     D --> E4
-    E1 --> F["Validate results and preserve deterministic level and registration order"]
+    E1 --> F["Validate results in deterministic level and registration order"]
     E2 --> F
     E3 --> F
     E4 --> F
     F --> G["Create one Overall Summary"]
     G --> H{"Configured report format"}
-    H -->|Markdown| I["Markdown report"]
-    H -->|JSON| J["JSON report"]
-    H -->|Terminal| K["Plain-text terminal report"]
+    H -->|Markdown| I["Markdown file"]
+    H -->|JSON| J["JSON file"]
+    H -->|Terminal| K["Plain-text stdout"]
 ```
 
-## Why This Architecture
+Every check owns an explicit timeout and error boundary. Completion timing
+never controls report order, and no scheduler or general concurrency framework
+is used.
 
-- **CLI over service:** Sentinel needs direct, read-only access to a local
-  repository and is intended to run on demand. A CLI avoids a daemon, hosted
-  API, persistent state, and deployment infrastructure.
-- **Static-first usefulness:** Repository and contract evidence remains useful
-  when a project is dormant. Runtime checks are conditional enhancements, so an
-  unavailable service does not erase static findings or crash the scan.
-- **One inventory and centralized probes:** Sharing one bounded repository
-  inventory and one reachability observation per configured service avoids
-  duplicate traversal, repeated probes, and contradictory availability
-  decisions.
-- **Concurrent levels, sequential checks:** The four assignment levels can make
-  progress independently, while registration-order execution within each level
-  keeps output deterministic and the concurrency model small.
-- **Fixed registration and plain functions:** The approved checks are known and
-  bounded. A plugin framework, scheduler, or dependency-injection container
-  would add delivery and review risk without improving this MVP.
-- **Bounded expensive integrations:** One shared Playwright session reuses page
+## Architectural Rationale
+
+- **CLI over service:** on-demand scanning needs direct repository access, not
+  a daemon, API server, database, or deployment control plane.
+- **Static-first usefulness:** repository and contract evidence remains useful
+  when a target is dormant; runtime checks are conditional enhancements.
+- **One inventory and centralized probes:** shared bounded setup avoids repeated
+  traversal, duplicate requests, and contradictory reachability decisions.
+- **Concurrent levels, sequential checks:** independent analysis levels can
+  progress together while each level remains deterministic and easy to reason
+  about.
+- **Fixed registration and plain functions:** the approved checks are known and
+  bounded; dynamic plugins, dependency-injection containers, and general
+  schedulers add no MVP value.
+- **Bounded expensive integrations:** one Chromium session reuses browser
   observations, and one paid AI request caps runtime, cost, and evidence
   disclosure.
-- **One validated report model:** Every renderer consumes the same
-  runtime-validated results and Overall Summary, so Markdown, JSON, and terminal
-  output preserve identical semantics.
+- **One validated report model:** all renderers preserve identical result and
+  summary semantics.
 
 ## Module Boundaries
 
-| Boundary                        | Responsibility                                                                                                                                                 |
-| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| CLI                             | Parse operational options, invoke the scan, and return the final exit code. It contains no check logic.                                                        |
-| Configuration                   | Load strict JSON, `.env`, and process environment values; apply precedence; normalize paths; and expose individual environment references without enumeration. |
-| Scan coordinator                | Validate shared prerequisites, cache reachability, run the four concurrent level groups, and collect deterministic results.                                    |
-| Project inventory               | Walk the target once and retain categorized paths and metadata, not whole-repository contents.                                                                 |
-| Bounded file reader             | Apply shared exclusions and size limits when checks read file content.                                                                                         |
-| Repository checks               | Inspect source/config inventory, manifests, lockfiles, `.gitignore`, CI, linting, and test presence.                                                           |
-| Security checks                 | Perform secret detection, npm vulnerability analysis, security-header checks, and evidence-derived debug checks.                                               |
-| Service probe and HTTP boundary | Determine reachability and perform bounded, read-only HTTP requests. It returns observations rather than policy decisions.                                     |
-| API checks                      | Interpret API observations and shallow OpenAPI or route evidence.                                                                                              |
-| Playwright boundary             | Own Chromium lifecycle, contexts, authentication state, timeouts, axe integration, and browser observations.                                                   |
-| AI boundary                     | Expose typed structured output to checks; own explicit vendor selection, private transports, paid-call limits, and fail-closed response validation.            |
-| Result model                    | Runtime-validate every result and construct one deterministic Overall Summary.                                                                                 |
-| Report module                   | Validate the normalized report and render one selected Markdown, JSON, or plain-text terminal representation.                                                  |
+| Boundary                        | Responsibility                                                                                                                                                  |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CLI                             | Parse operational options, invoke the scan, render or write the selected report, and set fatal exit status.                                                     |
+| Configuration                   | Load strict JSON, adjacent `.env`, and process environment values; apply precedence; normalize paths; expose referenced environment values without enumeration. |
+| Scan coordinator                | Validate shared prerequisites, cache reachability, construct the scan context, run levels, and collect deterministic results.                                   |
+| Repository inventory            | Walk the target once and retain bounded relative paths and file kinds rather than whole-repository contents.                                                    |
+| Bounded file reader             | Enforce root containment, symlink safety, exclusions, and size limits for selected text evidence.                                                               |
+| Repository checks               | Inspect root source/config inventory, manifests, lockfiles, `.gitignore`, CI, linting, tests, TypeScript, and README evidence.                                  |
+| Security checks                 | Perform npm vulnerability analysis, secret detection, environment hygiene, policy-header/CORS checks, and evidence-derived debug checks.                        |
+| Service probe and HTTP boundary | Determine reachability and perform bounded, read-only HTTP requests without making policy decisions.                                                            |
+| API checks                      | Interpret configured endpoint observations and configured target-contained OpenAPI evidence.                                                                    |
+| Playwright boundary             | Own Chromium lifecycle, contexts, authentication state, timeouts, axe integration, cleanup, and browser observations.                                           |
+| AI boundary                     | Select and redact configured OpenAPI/test evidence; own explicit vendor selection, private transports, paid-call limits, and fail-closed response validation.   |
+| Result model                    | Runtime-validate every result and construct one deterministic Overall Summary.                                                                                  |
+| Report module                   | Validate the normalized report and render one Markdown, JSON, or plain-text terminal representation.                                                            |
 
-Use a fixed list of plain check functions. External capabilities are passed only to modules that need them; there is no dependency-injection container, dynamic plugin registry, or class hierarchy.
+External capabilities are passed only to the modules that need them.
+Playwright objects and provider-native response envelopes do not escape their
+boundaries.
 
-## Implemented Tooling Baseline
+## Configuration, Tooling, and Delivery
 
-- The CLI uses Commander while keeping check logic outside the command boundary.
-- One recursively strict Zod schema validates and normalizes target, report, API, UI, and AI configuration.
-- TypeScript is strict, ESM, and compiled with `NodeNext` for Node.js 20.19 or later.
-- Vitest runs source tests, while ESLint and Prettier enforce static quality and formatting.
-- GitHub Actions runs the same aggregate `npm run check` command used locally.
-- One symlink-safe repository inventory supports generic, Node/npm, and TypeScript checks without retaining whole-repository contents.
-- The Playwright Chromium boundary and axe integration are implemented; compatible browser binaries remain an explicit runtime installation and are not downloaded during `npm install`.
+One recursively strict Zod schema covers target/report settings, optional API
+and UI runtime settings, and AI enablement/provider selection. Invalid,
+incomplete, conflicting, or unknown supplied values are fatal; missing optional
+runtime sections and credentials are normal prerequisites. Relative path
+anchoring, environment precedence, authentication shapes, form steps, limits,
+and report-format rules are specified only in
+[`docs/configuration.md`](configuration.md).
 
-### Optional Docker packaging
+The implementation uses strict ESM TypeScript for Node.js 20.19 or later,
+Commander, Zod, Vitest, ESLint, Prettier, Playwright Chromium, and
+`@axe-core/playwright`. `npm run check` is the shared local and CI quality gate.
+The npm installation does not download a browser.
 
-Docker is an external packaging and demo-orchestration layer, not a scan
-module. One multi-stage Dockerfile produces two isolated final images. The
-Sentinel target installs the locked root project, compiles its current
-TypeScript entry point, and adds Playwright Chromium plus its Linux
-dependencies. The sample target installs only sample production dependencies
-and copies its compiled server and static assets. The intentionally vulnerable
-sample dependency is therefore absent from the Sentinel image. The host
-`npm install` and `npm start` workflow remains authoritative and unchanged.
+The npm workflow is authoritative. Native UI scans require the documented
+explicit Chromium installation. The optional Docker scanner image installs
+Chromium and its Linux dependencies during image construction, so reviewers do
+not install a host browser for the Compose demo. The same multi-stage
+Dockerfile keeps the deliberately vulnerable sample dependency in the separate
+sample image. Compose only orchestrates the trusted bundled sample; it does not
+change Sentinel's service-lifecycle boundary. Build, run, networking, mount,
+credential, and container-isolation guidance lives in
+[`docs/docker.md`](docker.md).
 
-The Sentinel image retains root development dependencies because implemented
-repository checks import TypeScript at runtime. The sample image runs as the
-non-root Node user and contains neither Sentinel nor browser binaries. Changing
-the root package dependency classification is outside this packaging boundary.
+## Result and Report Model
 
-The optional Compose workflow starts the trusted bundled sample, waits for its
-configured health endpoint, invokes the existing CLI with the existing sample
-configuration and container-network URL overrides, prints a temporary report,
-and stops the sample when the scanner exits. This explicit reviewer command
-does not give Sentinel service-lifecycle responsibility: normal scans still
-never start, stop, discover, or restart targets. Other repositories can be
-mounted read-only and scanned directly without Compose.
+Each registered check has a stable ID, title, analysis level, phase, timeout,
+and plain function that receives the shared context and an abort signal. A check
+returns one or more results plus an explicit incomplete flag.
 
-Docker build context excludes `.env`, npm-auth, common private-key, and
-certificate-bundle files along with dependency directories, generated reports,
-Git data, and development evidence. Provider credentials are never accepted at
-build time; optional runtime pass-through retains the existing environment-only
-provider boundary and its documented Docker-administrator visibility
-limitation. The container is a local development and review convenience, not a
-hardened sandbox for hostile sites.
-
-## Setup and Concurrent Execution Flow
-
-Sentinel validates the readable target, builds the shared repository inventory, detects root Node/npm and TypeScript context, and prepares the shared scan context before check execution.
-
-Sentinel then probes only configured API and UI targets:
-
-- API health and UI base targets receive one bounded `HEAD` request each.
-- API and UI probes run concurrently and are cached for the current scan.
-- Any HTTP response means reachable, including `401`, `404`, and `500`.
-- Connection refusal, DNS/TLS failure, malformed responses, or timeout means unavailable.
-- Missing or unavailable services produce `Skipped / Info` availability notes and do not make the scan incomplete.
-
-After probing, Code & Repository, Security, API / Backend, and UI / Browser groups start concurrently. Checks remain sequential within a level. The runner preserves level and registration order, enforces each check timeout with an abort signal, and converts a timeout or exception into one isolated `Skipped / Info` diagnostic row.
-
-Security checks consume the cached observations before making bounded requests to configured unauthenticated endpoints or pages. Cached API reachability exclusively selects live contract/latency analysis or static OpenAPI fallback. Reachable UIs with configured browser targets receive one shared Playwright Chromium session.
-
-Sentinel never scans localhost ports and never starts, stops, or restarts target services.
-
-## Common Check and Result Model
-
-Each check has a stable ID, title, analysis level, phase, required timeout, and plain function receiving the shared context and a per-check abort signal.
-
-Each check execution returns one or more results plus an explicit incomplete
-flag for incomplete execution or bounded coverage. Empty, invalid, or
-inconsistent output is isolated as a single execution-error result. Handled
-missing prerequisites remain normal skips. Indeterminate evidence stays visible
-on its result but does not make the whole execution incomplete.
-
-Each result represents one stable check-and-subject pair and contains:
+Every result contains:
 
 - Check ID and title.
 - Analysis level: Code & Repository, Security, API / Backend, or UI / Browser.
 - Phase: static, runtime, or AI.
-- Optional subject and redacted evidence.
 - Status: Pass, Warn, Fail, or Skipped.
 - Severity: Critical, High, Medium, Low, or Info.
-- Finding and concrete recommendation.
-- Optional duration and diagnostic code.
+- Nonempty finding and concrete recommendation.
+- Optional subject, duration, diagnostic code, and bounded redacted evidence.
 
 Result rules:
 
-- Status, finding, severity, and recommendation are non-optional and runtime-validated for every result.
-- No issue produces one `Pass / Info` result.
-- A missing prerequisite produces one `Skipped / Info` result with a substantive finding and enablement recommendation.
-- Independently actionable subjects produce separate warning or failure results.
-- A check does not emit a generic pass alongside issue results.
-- Internal execution errors are not normal skips: they use a diagnostic code and make the report summary state that execution or coverage was incomplete.
-- All evidence and diagnostics are redacted before being stored or rendered.
-- One normalized Overall Summary stores the scan status, total, every
-  status/severity count including zeroes, and a deterministic narrative.
-  `Incomplete` means execution or bounded coverage did not complete; it does not
-  describe an indeterminate but successfully collected observation. Renderers
-  never recalculate it.
+- Status, finding, severity, and recommendation are mandatory, including for
+  skipped results.
+- A clean check emits `Pass / Info`; a missing prerequisite emits a substantive
+  `Skipped / Info`.
+- Independently actionable subjects receive separate results.
+- A check never emits a generic pass beside issue results.
+- Invalid output, exceptions, and timeouts become isolated execution
+  diagnostics rather than ordinary prerequisite skips.
+- Evidence and diagnostics are redacted before storage or rendering.
+- One runtime-validated Overall Summary stores the scan status, total results,
+  every status/severity count including zeroes, and a deterministic narrative.
+  Renderers never recalculate it.
 
-## Configuration
-
-The implemented loader reads optional `sentinel.config.json` and `.env` files from the invocation directory. `--config <path>` selects another JSON file and makes its directory the base for explicitly configured relative filesystem paths. Omitted target and report settings retain their invocation-directory defaults.
-
-The strict schema contains MVP settings for:
-
-- Target and report locations.
-- API base URL, health path, safe endpoints, expectations, timeouts, latency thresholds, and authentication references.
-- UI base URL, pages, two viewports, storage state or header references, and bounded form flows.
-- AI enablement and explicit provider selection; provider credentials and safety limits retain their existing fixed boundaries.
-
-Configuration precedence is:
-
-1. Existing process environment.
-2. `.env`.
-3. `sentinel.config.json`.
-4. The clean-run target and Markdown report defaults.
-
-The clean run defaults to the invocation directory for `target.root`, `markdown` for `report.format`, and `sentinel-report.md` for `report.path`. JSON requires an explicit path; terminal output forbids a path and writes only to stdout. API and UI sections are optional, but every value inside a supplied section is required according to the schema. Unknown keys and invalid, incomplete, unreadable, or malformed configuration are fatal path-specific errors; the loader never drops a bad section or falls back after validation fails.
-
-Credentials are resolved through environment-variable references and must never be written to reports or logs. Target URLs, ports, paths, credentials, endpoint parameters, and authentication values must not be hardcoded in production source.
-
-AI evidence selection does not enumerate the merged environment. It redacts
-recognized credential, private-key, authentication, URL-credential, and
-secret-like assignment patterns before target evidence reaches the provider
-boundary.
-
-Rule customization, custom secret-pattern languages, and per-check plugin configuration are outside the MVP.
-
-API/UI base targets and timeouts drive central reachability probing. API configuration also supplies one target-contained OpenAPI file, read-only endpoints, expectations, and optional header-authentication references for implemented API analysis. Unauthenticated endpoints and pages are consumed by Security header/CORS observations, and configured debug-like paths contribute debug-route evidence; Security never resolves target authentication. Playwright consumes at most 10 configured UI pages, exactly two viewports, optional header or storage-state authentication, and at most five form flows with 20 steps each. The complete implemented contract is documented in `docs/configuration.md`.
+`Incomplete` means execution or bounded coverage did not complete. A
+successfully collected but indeterminate observation remains visible without
+making the whole scan incomplete. Findings, unavailable services, and isolated
+check failures remain report content; only fatal tool errors produce a nonzero
+CLI exit code.
 
 ## Repository Analysis Boundary
 
-The implemented repository boundary walks the target once, records relative paths and file kinds, and never follows symlinks. It excludes VCS, dependency, generated, cache, and vendor trees. Traversal is bounded to depth 8, 20,000 entries, and five seconds; individual inspected text files are limited to 128 KiB.
+The inventory never follows symlinks. It excludes VCS, dependency, generated,
+cache, and vendor trees and is bounded to depth 8, 20,000 entries, and five
+seconds. Individual inspected text files are limited to 128 KiB. An incomplete
+inventory may preserve positive evidence but cannot support a definitive
+absence claim.
 
-The fixed Code & Repository checks cover:
+The fixed repository checks cover:
 
 - `.gitignore` coverage.
 - Readable, nonempty recognized linter and formatter configuration backed by a
-  matching package dependency or relevant npm script. npm-script recognition
-  uses bounded static heuristics for relevant names, tool invocations, and
-  obvious unreachable commands; Sentinel does not parse arbitrary shell syntax
-  or execute either tool.
-- Readable, nonempty test artifacts and, for Node projects, an npm test script
-  that is not an obvious no-op. This bounded static heuristic detects artifacts
-  and never claims that the tests passed or that arbitrary shell logic was
-  validated.
+  matching dependency or relevant npm script.
+- Readable, nonempty conventional test artifacts and, for Node projects, a
+  non-placeholder npm test script.
 - Common CI configuration.
 - Resolved root TypeScript strictness.
 - Root npm dependency freshness.
 - Root dependency lockfiles.
 - README quality.
 
-Generic repositories receive applicable filesystem checks. Root Node/npm and TypeScript evidence enables the deeper checks; pnpm, Yarn, Bun, and unknown stacks receive lockfile-presence behavior without deep adapters.
+Script recognition is a bounded static heuristic; Sentinel does not execute
+target lint, format, or test scripts. Root Node/npm and TypeScript evidence
+enables deeper checks. Other stacks retain useful generic behavior and
+lockfile-presence analysis without unimplemented adapters.
 
-Dependency freshness runs one read-only, non-scripted `npm outdated --json --long` process with a 10-second timeout and 64 KiB output limit. Missing npm, timeout, or registry failure produces a normal skipped note. Invalid successful structured output is isolated to the check and marks the report incomplete. This analysis is separate from the implemented npm vulnerability audit.
-
-An incomplete inventory never becomes a false absence warning. Positive evidence remains usable, while an affected absence-based check returns `Skipped / Info` and marks the report incomplete. Repository evidence contains only relative paths, recognized configuration names, and validated package/version metadata; raw file contents, command errors, registry configuration, and credentials are not rendered.
-
-API contract/runtime, UI browser analysis, and bounded target-derived AI
-analysis are implemented.
+Dependency freshness runs one script-disabled `npm outdated --json --long`
+process with a 10-second timeout and 64 KiB output limit. Missing npm, timeout,
+or registry failure is a complete-scan skip. Invalid successful structured
+output is an isolated incomplete result.
 
 ## Security Analysis Boundary
 
-The fixed Security group runs sequentially in this order:
+The fixed Security group runs sequentially:
 
-1. A root npm dependency audit.
-2. A high-confidence secret scan.
+1. Root npm dependency audit.
+2. High-confidence secret scan.
 3. Environment-file ignore hygiene.
 4. Runtime security headers and CORS.
 5. Evidence-derived debug endpoints.
 
-The npm audit runs only for a root npm project with exactly one
-`package-lock.json`. It uses one script-disabled, lockfile-only command with a
-12-second timeout and 1 MiB output bound. A clean result requires exit code 0,
-a valid npm audit v2 report, an empty vulnerability object, and internally
-consistent zero counts. Exit code 1 with a valid vulnerability report is
-interpreted as completed analysis; JSON npm error envelopes, other command
-failures, malformed output, and inconsistent counts can never become a pass.
-Findings are capped at 25 packages and contain only validated package metadata.
+The npm audit applies only to a root npm project whose only recognized root
+lockfile is `package-lock.json`. It runs one script-disabled, lockfile-only
+command with a 12-second timeout and 1 MiB output bound. A clean pass requires
+exit code 0 and a valid, internally consistent empty npm audit v2 report.
+Vulnerability findings require validated metadata; malformed reports, error
+envelopes, and unexpected exit states never become a pass.
 
-The secret scan reads only bounded, non-ignored text/source files from the
-shared symlink-safe inventory. It detects complete, plausible armored
-private-key blocks, known provider credential formats, and secret-like
-assignments in environment files. Detector definitions, lone key markers, and
-incomplete or implausibly short blocks do not count as credentials. It does not
-use entropy or generic source assignment heuristics. Findings store only a
-relative path, line number, and detector category—never the matched value or
-surrounding source. Environment hygiene separately checks whether real `.env`
-variants are ignored and whether placeholder templates remain reviewable.
+The secret scan reads only bounded, non-ignored text/source files. It detects
+complete plausible private-key blocks, known provider credential formats, and
+secret-like assignments in environment files. Findings retain only relative
+path, line number, and detector category. Environment hygiene separately checks
+whether real `.env` variants are ignored and templates remain reviewable.
 
-Runtime Security checks use cached reachability only as a prerequisite. The
-header check makes separate `GET`, `HEAD`, or `OPTIONS` requests to at most 12
-configured unauthenticated targets. Security requests never resolve target
-credentials or follow redirects. Header values, response bodies, full URLs,
-and transport errors are not rendered. The baseline covers API MIME-sniffing
-protection and strong HTTPS HSTS; UI restrictive CSP and frame protection,
-MIME-sniffing protection, safe referrer policy, restrictive permissions policy,
-and strong HTTPS HSTS; wildcard API CORS is reported separately. Weak or
-unrecognized policy syntax produces a warning rather than an unearned pass.
+Runtime policy checks observe only configured unauthenticated API endpoints and
+UI pages. Requests never resolve target credentials, follow redirects, or
+render header values, bodies, full URLs, or transport errors. Weak or
+unverifiable policy syntax warns rather than earning a pass.
 
 Debug candidates come only from configured paths and bounded Node/TypeScript
-route declarations. Sentinel does not brute-force common paths. Public 2xx/3xx
-responses fail; authentication rejection, unavailable runtime, 404, and unsafe
-methods retain static warnings so declared debug evidence never becomes a
-pass.
+route declarations. This source-derived discovery is specific to the debug
+check; it is not an API contract or AI evidence fallback. Sentinel never
+brute-forces common paths or exploits a discovered endpoint.
 
-This Security boundary is intentionally conservative. Root npm audit is used
-only where one lockfile supports an authoritative result; high-confidence
-secret patterns avoid noisy entropy and generic-token guesses; `.env` hygiene
-does not render values; and weak or unverifiable CSP, frame, or
-Permissions-Policy strength warns instead of passing. Runtime observations are
-configured or evidence-derived, unauthenticated, and read-only. Full SAST,
-Git-history scanning, authenticated penetration testing, exploitation, and
-complete multi-package-manager auditing remain outside the MVP.
+## API and Runtime Safety
 
-## Graceful Degradation
-
-Sentinel should produce the most complete report possible:
-
-| Condition                                                            | Behavior                                                                               |
-| -------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| No config or runtime URLs                                            | Scan the current directory statically; skip affected runtime checks.                   |
-| API unavailable                                                      | Emit a normal availability note and run only static OpenAPI fallback.                  |
-| UI unavailable                                                       | Emit a normal availability note and skip browser analysis before launch.               |
-| Authentication absent                                                | Run public checks and skip only protected expectations.                                |
-| OpenAPI invalid                                                      | Warn without claiming runtime shape coverage; source-route fallback remains pending.   |
-| Repository inventory bounded or partially unreadable                 | Preserve positive evidence; skip affected absence claims and mark the scan incomplete. |
-| npm freshness query unavailable                                      | Skip freshness analysis without failing or marking the scan incomplete.                |
-| `package-lock.json` or npm audit unavailable                         | Skip vulnerability lookup; never claim the project is clean.                           |
-| npm audit output malformed or internally inconsistent                | Skip the audit result, mark the scan incomplete, and never claim the project is clean. |
-| Runtime Security target unavailable or authentication required       | Retain static evidence or emit a scoped skipped note; never send target credentials.   |
-| Playwright launch fails                                              | Continue other checks and mark the scan incomplete.                                    |
-| AI disabled or credential absent                                     | Skip only the AI check; the scan remains complete.                                     |
-| AI provider timeout/failure, call-limit refusal, or invalid response | Skip only the AI check, continue deterministic checks, and mark the scan incomplete.   |
-| Individual check throws                                              | Emit a redacted execution diagnostic and mark the overall scan incomplete.             |
-| Target root unreadable or report cannot be rendered or written       | Treat as a fatal tool error.                                                           |
-
-The CLI returns a nonzero exit code only for fatal tool errors. Target findings, unavailable services, and isolated check failures remain report content.
-
-## OpenAPI and Runtime Safety
-
-The cached API reachability observation selects one analysis mode for the
-entire scan.
+Every configured API supplies one explicit target-contained OpenAPI 3.0/3.1
+JSON or YAML document. Sentinel never guesses or fetches a contract. Cached API
+reachability selects exactly one analysis mode for the entire scan:
 
 ```mermaid
 flowchart TD
@@ -370,197 +263,186 @@ flowchart TD
     A -->|not configured| G["Availability, runtime, and fallback checks: Skipped"]
 ```
 
-OpenAPI support is deliberately shallow:
+Live mode requests at most 12 configured `GET`, `HEAD`, or `OPTIONS` endpoints
+sequentially, once each, without following redirects. It compares configured
+and documented status, content type, JSON parseability, supported top-level
+response type, required fields, direct property types, and latency to response
+headers. Responses are bounded to 256 KiB.
 
-- Require one explicit, target-contained `api.openApiPath`; Sentinel never guesses a filename or fetches the contract from the service.
-- Parse bounded OpenAPI 3.0/3.1 JSON or YAML documents through the symlink-safe repository boundary.
-- Use cached reachability to select one mode for the scan. Reachable APIs receive only live analysis; unavailable APIs receive only static fallback.
-- Request at most 12 configured `GET`, `HEAD`, or `OPTIONS` endpoints sequentially, once each, without following redirects.
-- Check configured and documented status, content type, JSON parseability, supported top-level JSON response type, required fields, direct property types, and latency to response headers. Schema types follow the declared OpenAPI 3.0/3.1 dialect; OpenAPI 3.0 arrays remain a visible limitation because their required nested `items` schema is outside the shallow validator. Matched non-JSON schemas produce a visible limitation rather than an unverified shape pass.
-- Limit response bodies to 256 KiB and preserve completed findings when an endpoint, body, or internal deadline bound limits coverage.
-- Keep malformed configured read-only operations visible so they prevent a
-  document-level contract pass.
+Static mode checks configured endpoint alignment against the same OpenAPI
+document without claiming live status, shape, or latency coverage. Deep schema
+composition, comprehensive `$ref` resolution, generated requests,
+source-route discovery, mutation, fuzzing, and complete contract validation
+remain outside the boundary. Endpoint failure after a successful probe never
+switches the scan to static fallback.
 
-The inactive mode emits one explicit skipped result. Endpoint transport failures after a successful central probe never trigger fallback during that scan. Missing authentication references skip only the affected endpoint, and target credentials are used only as request headers.
-
-Deep schema composition, comprehensive `$ref` resolution, generated payloads, source-route discovery, and complete contract validation are outside the implemented boundary.
-
-All runtime API checks are read-only. Sentinel does not issue `POST`, `PUT`, `PATCH`, or `DELETE` requests.
+All runtime API operations are read-only. Target credentials are used only as
+configured request headers for protected endpoints and are never rendered.
 
 ## Playwright Boundary
 
-All browser automation uses Playwright with Chromium:
+When the cached UI probe is reachable and browser targets are configured, one
+composite check owns one Chromium launch, one shared public context, and at most
+one authenticated context.
 
-- One composite `ui.browser-analysis` check owns one Chromium launch and bounded cleanup attempts for every browser resource. It reuses one public context and, when required, one authenticated context.
-- Missing or unreachable UI services skip browser work before launch. A launch failure produces exactly one `Skipped / Info` diagnostic, recommends `npx playwright install chromium`, marks the report incomplete, and leaves other levels running.
-- Authentication is limited to configured storage state or headers. Header values are resolved only for protected targets and applied only to same-origin requests.
-- Every configured page loads once at each of the two viewports. The same loads
-  provide navigation, console/page-error, broken-image, axe WCAG A/AA, and
-  horizontal-overflow observations. Absence of overflow does not claim
-  responsive adaptation; application-specific responsive assertions require
-  future explicit configuration. Axe rules that require manual review remain
-  visible as indeterminate results and prevent an accessibility pass without
-  marking successful browser execution incomplete.
-- Form flows run at the widest configured viewport. Actions are limited to navigation, fill, check/uncheck, click, exact visible-text, and exact same-origin URL assertions.
-- Every Playwright operation uses the smaller of `ui.timeoutMs` and the remaining 120-second internal budget. A non-cancellable observation timeout closes that page before the next viewport or target; completed categories remain available, later categories are unavailable, and axe runs last.
-- The check uses a 120-second internal budget inside its 125-second runner timeout. Completed findings survive budget exhaustion, which adds a coverage-limited skip and marks the report incomplete. Context and browser cleanup share bounded headroom inside the runner timeout, and cleanup failure marks the result incomplete.
-- Evidence is capped and contains only sanitized counts, page/viewport labels, same-origin image paths, and axe rule metadata. Raw console/exception text, selectors, form values, headers, credentials, complete URLs, and queries are never rendered.
-- Sentinel never discovers and submits arbitrary forms.
+- Each configured page loads once at each of exactly two configured viewports.
+  Those loads supply navigation, console/page-error, broken-image, axe WCAG
+  A/AA, and horizontal-overflow observations.
+- Absence of horizontal overflow does not claim responsive adaptation.
+- Authentication is limited to configured storage state or headers. Header
+  values are resolved only for protected targets and applied only to
+  same-origin requests.
+- Explicit form flows run at the widest viewport and are limited to navigation,
+  fill, check/uncheck, click, exact visible-text, and exact same-origin URL
+  assertions. Sentinel never discovers or submits arbitrary forms.
+- Every operation uses the smaller of `ui.timeoutMs` and the remaining
+  120-second internal budget. The check has a 125-second runner timeout and
+  bounded cleanup headroom.
+- Evidence contains only sanitized counts, labels, same-origin image paths, and
+  axe rule metadata. Raw console text, exceptions, selectors, form values,
+  headers, credentials, full URLs, and queries are never rendered.
 
-Playwright objects do not escape into the scan coordinator or report module.
+Indeterminate axe evidence prevents an accessibility pass but does not make
+otherwise successful execution incomplete. Budget exhaustion or cleanup
+failure preserves completed findings and marks coverage incomplete.
+
+Native installations require a separately installed compatible Chromium
+binary. The Docker scanner image includes Chromium. In either environment, a
+launch failure becomes one `Skipped / Info` diagnostic, marks the report
+incomplete, and leaves other levels running. Missing or unreachable UI services
+skip browser work before launch.
 
 ## AI Boundary
 
-The required AI check performs semantic test-gap analysis by comparing a bounded selection of API contracts or route evidence with relevant tests.
-
-The diagram shows the only path from target evidence to an AI-backed result,
-including the gates that prevent unsafe transmission or unvalidated output.
+The AI check performs one bounded semantic comparison between a configured
+target OpenAPI document and one related readable test artifact. It determines
+whether the supplied evidence supports one concrete missing API test or no
+supported gap; it does not summarize the report or replace deterministic API
+analysis.
 
 ```mermaid
 flowchart TD
     accTitle: Fail-closed AI evidence and result flow
-    accDescr: One configured OpenAPI contract and one related test are bounded and redacted before a single selected provider request. Only locally validated outcomes enter Sentinel results; unsafe evidence and unavailable provider responses fail closed.
+    accDescr: One configured OpenAPI contract and one related test are bounded and redacted before a single selected provider request. Only locally validated outcomes enter Sentinel results.
 
     A["Configured target OpenAPI contract"] --> C["Select one related test"]
     B["At most 12 bounded test candidates"] --> C
-    C --> D["Redact credentials and enforce the 8 KiB evidence limit"]
+    C --> D["Redact credentials and enforce 8 KiB limit"]
     D --> E{"Evidence safe and sufficient?"}
-    E -->|No| F["Skipped / Info; complete scan; no provider request"]
-    E -->|Yes| G["Atomically reserve the one-call allowance"]
-    G --> H["Provider-neutral structured AI client"]
-    G -->|Allowance unavailable| Q["Skipped / Info; incomplete execution"]
+    E -->|No| F["Skipped / Info; complete scan; no request"]
+    E -->|Yes| G["Reserve one-call allowance"]
+    G --> H["Provider-neutral typed client"]
     H --> I{"Explicit selected transport"}
-    I -->|OpenAI| J["Native schema-constrained OpenAI request"]
-    I -->|Claude| K["Native schema-constrained Claude request"]
-    J --> L["Structured provider response"]
+    I -->|OpenAI| J["Native structured OpenAI request"]
+    I -->|Claude| K["Native structured Claude request"]
+    J --> L["Validate envelope, schema, citations, and output safety"]
     K --> L
-    J -->|Provider unavailable| Q
-    K -->|Provider unavailable| Q
-    L --> M["Validate envelope, Zod schema, exact citations, and output safety"]
-    M -->|Invalid or unrecognized| Q
-    M --> N{"Validated outcome"}
-    N -->|gap| O["Warn or Fail"]
-    N -->|no_supported_gap| P["Skipped / Info; complete scan"]
-    F --> R["Normalized CheckResult only"]
-    O --> R
-    P --> R
-    Q --> R
+    L -->|Invalid or unavailable| Q["Skipped / Info; incomplete execution"]
+    L -->|gap| O["Warn or Fail"]
+    L -->|no_supported_gap| P["Skipped / Info; complete scan"]
 ```
 
-The MVP uses:
+The evidence selector:
 
-- One typed, provider-neutral client exposed to checks, with private OpenAI and Claude transports.
-- Mandatory provider selection when AI is enabled; Sentinel never infers a provider from available credentials.
-- One explicit setup switch and one client per scan; there is no provider registry.
-- An atomically reserved allowance of one paid request total and one active request at a time. Failed attempts consume the allowance.
-- Vendor-native schema-constrained output generated from the same strict Zod schema used for local validation.
-- Parsing only from each vendor's documented structured-output slot; no free-text, code-fence, partial-output, or multi-block recovery.
-- Exact citations limited to evidence supplied in the request.
-- Repository and target-secret redaction, plus input-size limits, before evidence transmission.
-- Deterministic validation and mapping into Sentinel results. A valid AI finding can warn or fail but can never pass.
-- A two-outcome contract: a supported `gap` warns or fails, while
-  `no_supported_gap` produces an informational skip without inventing a
-  finding.
-- Fail-closed handling: malformed, unknown, refused, truncated, oversized, schema-invalid, or otherwise unrecognized output becomes `Skipped / Info` and marks the scan incomplete.
-- No multi-turn workflow, provider registry, or elaborate retry system.
+- Requires the configured target-contained OpenAPI document.
+- Evaluates at most 12 test candidates and reads each within 16 KiB.
+- Selects one artifact related to contract paths or operation identifiers.
+- Limits combined contract/test evidence to 8 KiB.
+- Uses target-relative citations.
+- Redacts recognized private-key, provider-credential, authentication,
+  URL-credential, and secret-like assignment patterns before dispatch.
+- Skips without consuming the paid-call allowance when evidence is missing,
+  unsafe, unrelated, unreadable, or oversized.
 
-The selected provider credential may be sent only as an authentication header to that provider. Real credential values must never enter prompts, request bodies, response evidence, reports, logs, tests, or documentation.
+AI requires explicit enablement and provider selection. One provider-neutral
+client selects a private OpenAI or Claude transport, permits one paid request
+total and one active request, performs no retries, and accepts only the
+vendor-native structured-output slot. The response is bounded to 512 output
+tokens, 64 KiB, and 20 seconds inside a 25-second check timeout.
 
-The overall report summary remains deterministic. When paid credentials are
-absent, all deterministic checks run and the AI check is `Skipped / Info`.
+The same strict schema validates provider output locally. Exact citations must
+match supplied evidence, and provider-authored text is rejected if credential
+content is detected. A supported `gap` may warn or fail;
+`no_supported_gap` is informational `Skipped`; AI never produces a pass.
+Malformed, refused, truncated, unavailable, schema-invalid, or otherwise
+unrecognized dispatched output fails closed and marks execution incomplete.
 
-The implemented evidence selector requires an explicitly configured,
-target-contained OpenAPI document. It evaluates at most 12 test candidates,
-reads each candidate within 16 KiB, and selects one readable artifact related
-to contract paths or operation identifiers. Contract plus test evidence is
-limited to 8 KiB and uses target-relative citation paths. Recognized
-private-key, provider-credential, authentication, URL-credential, and
-secret-like assignment patterns are redacted before the request. Missing,
-unsafe, unrelated, unreadable, or oversized evidence produces
-`AI_EVIDENCE_INSUFFICIENT` without consuming the paid-call allowance.
-Provider-authored finding and recommendation text is also rejected before
-reporting if credential content is detected.
+Provider credentials may be sent only as authentication headers to the selected
+provider. Real credential values never enter prompts, request bodies, results,
+reports, logs, tests, or documentation. Route-source fallback, multiple-test
+synthesis, broader evidence discovery, additional providers, multi-turn agents,
+and provider comparison are outside the MVP.
 
-Process environment variables still control enablement, explicit provider
-selection, and provider-specific credentials. Output is fixed at 512 tokens, an
-accepted response body of 64 KiB, a 20-second provider timeout, and a 25-second
-check timeout. Route-source fallback, multiple-test synthesis, and broader
-evidence discovery remain outside the bounded MVP.
+## Graceful Degradation
+
+Sentinel produces the most complete trustworthy report possible:
+
+| Condition                                                             | Behavior                                                                               |
+| --------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| No API/UI configuration                                               | Run applicable static checks and emit scoped prerequisite skips.                       |
+| API unavailable                                                       | Emit availability/runtime skips and activate only static OpenAPI fallback.             |
+| UI unavailable                                                        | Emit an availability skip and do not launch Chromium.                                  |
+| Authentication reference absent                                       | Run public checks and skip only protected expectations.                                |
+| OpenAPI invalid or unsupported                                        | Preserve visible limitations without claiming contract coverage.                       |
+| Repository inventory bounded or partly unreadable                     | Preserve positive evidence; skip affected absence claims and mark coverage incomplete. |
+| npm freshness query unavailable                                       | Skip freshness analysis without making the scan incomplete.                            |
+| npm audit unavailable                                                 | Skip vulnerability lookup and never claim the project is clean.                        |
+| npm audit output malformed or inconsistent                            | Skip audit results, mark execution incomplete, and never claim a clean audit.          |
+| Runtime Security target unavailable                                   | Retain static evidence or emit a scoped skip; never resolve target credentials.        |
+| Playwright launch, budget, or cleanup failure                         | Preserve available results, add diagnostics, and mark coverage incomplete.             |
+| AI disabled, credential absent, or safe evidence insufficient         | Skip only AI without a paid request; the scan remains complete.                        |
+| AI dispatched failure, refusal, call-limit conflict, or bad output    | Skip only AI, consume the allowance, and mark execution incomplete.                    |
+| Individual check throws, times out, or returns invalid output         | Emit a redacted isolated diagnostic and mark execution incomplete.                     |
+| Target unreadable, configuration invalid, or report cannot be written | Treat as a fatal tool error and return nonzero.                                        |
 
 ## Testing Strategy
 
-Sentinel's automated tests use Vitest. The standalone sample target uses Node's
-built-in test runner so it remains independent of Sentinel's implementation.
-`npm run check` is the milestone-completion gate and runs formatting
-verification, linting, compilation, and both test suites.
+Sentinel uses Vitest; the standalone sample uses Node's built-in test runner.
+`npm run check` runs formatting verification, linting, compilation, the
+Sentinel suite, and the sample package checks. Automated tests use deterministic
+fakes for browser sessions, provider responses, npm registry output, and
+controlled HTTP observations.
 
-Required unit tests focus on:
+Coverage concentrates on:
 
-- Configuration precedence and validation.
-- Concurrent level scheduling, sequential per-level order, timeouts, and failure isolation.
-- Central reachability caching and sanitized unavailable observations.
-- Environment-reference resolution and redaction.
-- Result invariants and summary counts.
-- Markdown, JSON, and terminal renderer consistency.
-- Bounded file exclusion, stack detection, and repository-check heuristics.
-- npm freshness output validation without live registry access.
-- npm audit envelope/count validation without live registry access.
-- Secret detector coverage and proof that matched values never enter results.
-- Environment-file ignore hygiene, runtime header/CORS policy, and evidence-derived debug routes.
-- Safe endpoint selection and shallow response expectations.
-- Exclusive live/static API mode selection, bounded response handling, and per-endpoint latency.
-- Shared Playwright session behavior, browser-unavailable degradation, page observations, axe severity, authentication isolation, horizontal-overflow checks, and every configured form-step variant.
-- AI evidence selection/redaction plus response and dynamic citation validation.
+- Strict configuration, precedence, path normalization, and environment
+  references.
+- Concurrent level scheduling, sequential check order, timeouts, isolation,
+  and deterministic results.
+- Reachability caching and exclusive live/static API mode selection.
+- Inventory bounds, symlink safety, stack detection, and repository heuristics.
+- npm freshness and audit envelope/count validation without live registries.
+- Secret detection/redaction, environment hygiene, runtime policies, and debug
+  route discovery.
+- Bounded OpenAPI parsing, endpoint response handling, and latency results.
+- Playwright lifecycle, observation mapping, authentication isolation, axe,
+  overflow, form steps, and graceful browser unavailability.
+- AI evidence selection/redaction, provider envelopes, strict outputs, dynamic
+  citations, safety rejection, and no-credential behavior.
+- Runtime-validated report invariants and renderer consistency.
 
-Required integration tests cover:
+Live paid-AI calls, live npm registries, full browser matrices, and external
+repositories are excluded from the automated suite. The separately started
+sample and optional trusted-sample Compose workflow provide manual end-to-end
+runtime validation without giving Sentinel target lifecycle responsibility.
 
-- Generic and Node repository scans with no target services.
-- Unreachable API/UI degradation and static fallback.
-- Controlled HTTP observations.
-- Deterministic fake Playwright observations without a browser binary or target service.
-- Recorded npm audit output.
-- Disabled, valid, and invalid fake-AI responses.
-- Required report-field completeness.
+## Explicit Non-Goals
 
-Live paid-AI calls, live npm registry queries, live vulnerability databases,
-full browser matrices, and external repositories are not part of the automated
-test suite. The sample tests lock both intentional flaws and correct behavior
-without invoking Sentinel, Playwright, or external services. A complete
-automated CLI/Playwright smoke test is a stretch goal; the separate-process demo
-sample run with explicitly installed Chromium remains mandatory.
-
-## Implementation Order
-
-1. Build a vertical slice: CLI, minimal config, validated result/summary model, one repository check, and selectable report renderers.
-2. Perform an early AI risk spike using one fixture, explicit OpenAI and Claude adapters, one selected-provider request, and one cited structured result.
-3. Implement configuration, the isolated concurrent runner, inventory, stack detection, generic repository checks, and bounded target-evidence redaction. This milestone is complete.
-4. Add secret detection and npm-only vulnerability analysis. This milestone is complete.
-5. Add service probes, shallow OpenAPI fallback, and safe API/security runtime checks. This milestone is complete.
-6. Add the shared Playwright Chromium lifecycle and required browser checks. This milestone is complete.
-7. Harden the AI check behind a provider-neutral, one-call, fail-closed client,
-   replace the feasibility fixture with bounded target evidence, and preserve
-   no-AI behavior. This milestone is complete.
-8. Harden tests, generate the demo report, complete the README, and assemble
-   Cursor evidence. The standalone demo target, final report, documentation,
-   and annotated process-evidence index are complete; an unambiguous
-   Cursor-identifiable capture and final packaging remain.
-9. Attempt stretch work only after all required deliverables pass.
-
-Capture genuine Cursor evidence throughout these milestones rather than reconstructing it at the end.
-
-## Explicitly Out of Scope
-
-- Long-running service, dashboard, or hosted UI.
-- Automatic service startup or port scanning.
-- Authenticated Security requests or brute-force debug-path probing.
-- Deep Python, Java, Go, pnpm, or Yarn adapters.
-- Non-read-only API operations, fuzzing, exploitation, or load testing.
-- Complete OpenAPI/JSON Schema validation.
-- Automatic form discovery or application-specific login automation.
-- Entropy-based or generic source-assignment secret heuristics, Git-history secret scanning, or full SAST/data-flow analysis.
-- Visual regression or multi-browser/device matrices.
-- General responsive-adaptation claims without explicit configured assertions.
-- AI providers beyond OpenAI and Claude, multi-turn agents, provider comparison, or a provider plugin system.
-- Dynamic check plugins, dependency-injection frameworks, event buses, or job schedulers.
-- Simultaneous multi-format output, ANSI styling, interactive terminal output, or report formats beyond Markdown, JSON, and plain text.
+- Long-running service, dashboard, hosted UI, database, or persistent state.
+- Automatic service startup, port discovery, or process supervision.
+- Authenticated Security requests, brute-force route discovery, penetration
+  testing, exploitation, mutation, fuzzing, or load testing.
+- Deep Python, Java, Go, pnpm, Yarn, Bun, or workspace adapters.
+- Complete OpenAPI/JSON Schema evaluation or API source-route fallback.
+- Automatic form discovery, application-specific login automation, visual
+  regression, or multi-browser/device matrices.
+- General responsive-adaptation claims without explicit assertions.
+- Entropy-based or generic source-assignment secret heuristics, Git-history
+  secret scanning, or full SAST/data-flow analysis.
+- AI providers beyond OpenAI and Claude, multiple-test synthesis, multi-turn
+  workflows, retries, provider comparison, or a provider plugin system.
+- Dynamic check plugins, class hierarchies, dependency-injection frameworks,
+  event buses, or job schedulers.
+- Simultaneous multi-format output, ANSI styling, interactive terminal output,
+  or report formats beyond Markdown, JSON, and plain text.
 - Automated fixes or target-source modification.
