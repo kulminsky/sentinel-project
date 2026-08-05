@@ -6,7 +6,10 @@ import { join } from "node:path";
 import { test } from "vitest";
 
 import { runTargetAiCheck } from "../src/ai/check.js";
-import { selectTargetAiEvidence } from "../src/ai/evidence.js";
+import {
+  sanitizeAiEvidenceText,
+  selectTargetAiEvidence,
+} from "../src/ai/evidence.js";
 import { createSentinelConfigSchema } from "../src/config/schema.js";
 import { inspectRepository } from "../src/repository/inspection.js";
 import { createFakeStructuredAiClient } from "./support/fake-ai-provider.js";
@@ -36,6 +39,17 @@ function apiConfig(root: string) {
     },
   }).api;
 }
+
+test("credential sanitization is idempotent for redacted assignments", () => {
+  const raw = "process.env.SENTINEL_SAMPLE_TEST_SECRET = secretMarker;";
+  const sanitized = sanitizeAiEvidenceText(raw);
+
+  assert.equal(
+    sanitized,
+    "process.env.SENTINEL_SAMPLE_TEST_SECRET = [REDACTED];",
+  );
+  assert.equal(sanitizeAiEvidenceText(sanitized), sanitized);
+});
 
 test("selects bounded target contract and related test evidence with credential redaction", async () => {
   await withTarget(async (root) => {

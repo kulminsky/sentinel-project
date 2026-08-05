@@ -34,7 +34,7 @@ const PRIVATE_KEY_MARKER =
 const SECRET_NAME =
   "(?:access[_-]?key|access[_-]?token|api[_-]?key|authorization|client[_-]?secret|cookie|cookies|credential|headers?|password|passwd|private[_-]?key|proxy[_-]?authorization|refresh[_-]?token|secret|set[_-]?cookie|token|x[_-]?api[_-]?key)";
 const SECRET_ASSIGNMENT = new RegExp(
-  `((?:(?:["']?${SECRET_NAME}["']?)|(?:[A-Za-z_$][\\w$]*\\.)+${SECRET_NAME})\\s*[:=]\\s*)(?:"(?:\\\\.|[^"\\\\])*"|'(?:\\\\.|[^'\\\\])*'|\\\`(?:\\\\.|[^\\\`\\\\])*\\\`|[^\\r\\n,;}\\]]+)`,
+  `((?:(?:["']?${SECRET_NAME}["']?)|(?:[A-Za-z_$][\\w$]*\\.)+${SECRET_NAME})\\s*[:=]\\s*)("(?:\\\\.|[^"\\\\])*"|'(?:\\\\.|[^'\\\\])*'|\\\`(?:\\\\.|[^\\\`\\\\])*\\\`|\\[REDACTED(?: [A-Z ]+)?\\]|[^\\r\\n,;}\\]]+)`,
   "gi",
 );
 const AUTHORIZATION_VALUE =
@@ -157,7 +157,13 @@ export function sanitizeAiEvidenceText(content: string): string | undefined {
   }
 
   redacted = redacted
-    .replace(SECRET_ASSIGNMENT, "$1[REDACTED]")
+    .replace(
+      SECRET_ASSIGNMENT,
+      (match: string, prefix: string, value: string | undefined) =>
+        value !== undefined && REDACTED_VALUE.test(value.trim())
+          ? match
+          : `${prefix}[REDACTED]`,
+    )
     .replace(AUTHORIZATION_VALUE, "[REDACTED AUTHORIZATION]")
     .replace(/\bhttps?:\/\/[^/\s:@]+:[^/\s@]+@/gi, "https://[REDACTED]@");
 

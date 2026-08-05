@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { Buffer } from "node:buffer";
 import { test } from "vitest";
 
 import { runTargetAiCheck } from "../src/ai/check.js";
@@ -109,6 +110,48 @@ test("a typed AI finding maps to the normalized result and Markdown report", asy
   assert.match(markdown, /\*\*Phase:\*\* AI/);
   assert.match(markdown, /authenticated cross-account/);
   assert.match(markdown, /openapi\.json/);
+});
+
+test("sanitized evidence at the exact input bound reaches the provider", async () => {
+  const contract = '{"openapi":"3.1.0"}';
+  const redactedAssignment =
+    "process.env.SENTINEL_SAMPLE_TEST_SECRET = [REDACTED];\n";
+  const fixedBytes =
+    Buffer.byteLength(CONTRACT_PATH) +
+    Buffer.byteLength(TEST_PATH) +
+    Buffer.byteLength(contract) +
+    Buffer.byteLength(redactedAssignment);
+  const evidence: AiEvidenceSelection = {
+    state: "available",
+    documents: [
+      {
+        path: CONTRACT_PATH,
+        kind: "contract",
+        content: contract,
+      },
+      {
+        path: TEST_PATH,
+        kind: "test",
+        content: `${redactedAssignment}${"x".repeat(8 * 1024 - fixedBytes)}`,
+      },
+    ],
+  };
+  const fake = createFakeStructuredAiClient({
+    state: "available",
+    value: noSupportedGap(),
+    provenanceEvidence: [],
+  });
+
+  const execution = await runTargetAiCheck(
+    {
+      kind: "ready",
+      client: fake.client,
+    },
+    evidence,
+  );
+
+  assert.equal(fake.requests.length, 1);
+  assert.equal(execution.result.diagnosticCode, "AI_NO_SUPPORTED_GAP");
 });
 
 test("medium and low AI findings map to warnings", async () => {
